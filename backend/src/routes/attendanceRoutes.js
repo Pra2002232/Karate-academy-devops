@@ -1,7 +1,14 @@
 const express = require("express");
 const pool = require("../config/db");
 
+const {
+    authenticateToken,
+    authorizeRoles
+} = require("../middleware/authMiddleware");
+
 const router = express.Router();
+
+router.use(authenticateToken);
 
 
 // ==================================================
@@ -92,7 +99,14 @@ router.post("/", async (req, res) => {
 
 
         // ------------------------------
-        // Insert attendance
+        // Insert / Update attendance
+        // ------------------------------
+        //
+        // One attendance record is allowed per
+        // student per date.
+        //
+        // New record  -> INSERT
+        // Existing    -> UPDATE
         // ------------------------------
 
         const result = await pool.query(
@@ -105,13 +119,19 @@ router.post("/", async (req, res) => {
                 marked_by
             )
             VALUES ($1, $2, $3, $4)
+
+            ON CONFLICT (student_id, attendance_date)
+            DO UPDATE SET
+                status = EXCLUDED.status,
+                marked_by = EXCLUDED.marked_by
+
             RETURNING *
             `,
             [
                 student_id,
                 attendance_date,
                 status,
-                marked_by || null
+                req.user.id
             ]
         );
 
@@ -206,6 +226,9 @@ router.get("/date/:date", async (req, res) => {
 
             JOIN students s
                 ON a.student_id = s.id
+
+            LEFT JOIN branches b
+                ON s.branch_id = b.id
 
             WHERE a.attendance_date = $1
 
@@ -387,6 +410,299 @@ router.get("/summary/:studentId/:year/:month", async (req, res) => {
     }
 
 });
+
+
+
+
+// ==================================================
+// BRANCH-WISE ATTENDANCE SUMMARY
+
+// ==================================================
+// BRANCH-WISE ATTENDANCE SUMMARY
+// ==================================================
+
+router.get(
+    "/branch-summary/:date",
+    authorizeRoles(
+        "SUPER_ADMIN",
+        "BRANCH_ADMIN"
+    ),
+    async (req, res) => {
+
+        try {
+
+            const { date } = req.params;
+
+            if (!date) {
+
+                return res.status(400).json({
+                    message:
+                        "Attendance date is required"
+                });
+
+            }
+
+            let sql = `
+                SELECT
+
+                    b.id AS branch_id,
+
+                    b.branch_name,
+
+                    b.branch_code,
+
+                    COUNT(
+                        DISTINCT s.id
+                    ) AS total_students,
+
+                    COUNT(
+                        DISTINCT CASE
+                            WHEN a.status = 'PRESENT'
+                            THEN a.student_id
+                        END
+                    ) AS present_students,
+
+                    COUNT(
+                        DISTINCT CASE
+                            WHEN a.status = 'ABSENT'
+                            THEN a.student_id
+                        END
+                    ) AS absent_students,
+
+                    COUNT(
+                        DISTINCT CASE
+                            WHEN a.status = 'LATE'
+                            THEN a.student_id
+                        END
+                    ) AS late_students,
+
+                    COUNT(
+                        DISTINCT CASE
+                            WHEN a.id IS NOT NULL
+                            THEN a.student_id
+                        END
+                    ) AS marked_students
+
+                FROM branches b
+
+                LEFT JOIN students s
+                    ON s.branch_id = b.id
+                    AND s.status = 'ACTIVE'
+
+                LEFT JOIN attendance a
+                    ON a.student_id = s.id
+                    AND a.attendance_date = $1
+            `;
+
+            const params = [date];
+
+            /*
+             * Super Admin:
+             *   all active branches.
+             *
+             * Branch Admin:
+             *   only assigned branch.
+             */
+
+            if (
+                req.user.role === "BRANCH_ADMIN"
+            ) {
+
+                if (!req.user.branch_id) {
+
+                    return res.status(403).json({
+                        message:
+                            "Branch Admin is not assigned to a branch"
+                    });
+
+                }
+
+                sql += `
+                    WHERE b.id = $2
+                `;
+
+                params.push(
+                    req.user.branch_id
+                );
+
+            }
+
+            sql += `
+
+                AND b.status = 'ACTIVE'
+
+                GROUP BY
+                    b.id,
+                    b.branch_name,
+                    b.branch_code
+
+                ORDER BY
+                    b.branch_name
+            `;
+
+            const result =
+                await pool.query(
+                    sql,
+                    params
+                );
+
+            const branches =
+                result.rows.map(
+                    function (row) {
+
+                        const total =
+                            Number(
+                                row.total_students || 0
+                            );
+
+                        const present =
+                            Number(
+                                row.present_students || 0
+                            );
+
+                        const absent =
+                            Number(
+                                row.absent_students || 0
+                            );
+
+                        const late =
+                            Number(
+                                row.late_students || 0
+                            );
+
+                        const marked =
+                            Number(
+                                row.marked_students || 0
+                            );
+
+                        const percentage =
+                            total > 0
+                                ? Number(
+                                    (
+                                        present /
+                                        total *
+                                        100
+                                    ).toFixed(1)
+                                )
+                                : 0;
+
+                        return {
+
+                            branch_id:
+                                row.branch_id,
+
+                            branch_name:
+                                row.branch_name,
+
+                            branch_code:
+                                row.branch_code,
+
+                            total_students:
+                                total,
+
+                            present:
+                                present,
+
+                            absent:
+                                absent,
+
+                            late:
+                                late,
+
+                            marked:
+                                marked,
+
+                            not_marked:
+                                Math.max(
+                                    total - marked,
+                                    0
+                                ),
+
+                            attendance_percentage:
+                                percentage
+
+                        };
+
+                    }
+                );
+
+            const totals =
+                branches.reduce(
+                    function (acc, branch) {
+
+                        acc.total_students +=
+                            branch.total_students;
+
+                        acc.present +=
+                            branch.present;
+
+                        acc.absent +=
+                            branch.absent;
+
+                        acc.late +=
+                            branch.late;
+
+                        acc.marked +=
+                            branch.marked;
+
+                        acc.not_marked +=
+                            branch.not_marked;
+
+                        return acc;
+
+                    },
+                    {
+                        total_students: 0,
+                        present: 0,
+                        absent: 0,
+                        late: 0,
+                        marked: 0,
+                        not_marked: 0
+                    }
+                );
+
+            totals.attendance_percentage =
+                totals.total_students > 0
+                    ? Number(
+                        (
+                            totals.present /
+                            totals.total_students *
+                            100
+                        ).toFixed(1)
+                    )
+                    : 0;
+
+            res.json({
+
+                date: date,
+
+                totals: totals,
+
+                branches: branches
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Branch attendance summary error:",
+                error
+            );
+
+            res.status(500).json({
+
+                message:
+                    "Failed to fetch branch attendance summary",
+
+                error:
+                    error.message
+
+            });
+
+        }
+
+    }
+);
 
 
 module.exports = router;

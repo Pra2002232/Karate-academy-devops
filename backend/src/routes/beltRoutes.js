@@ -1,5 +1,17 @@
 const express = require("express");
+const {
+    authenticateToken
+} = require("../middleware/authMiddleware");
+
 const router = express.Router();
+
+/*
+ * All fee/belt API calls require an authenticated
+ * academy user. This also establishes the PostgreSQL
+ * role/branch request context used by RLS.
+ */
+router.use(authenticateToken);
+
 const pool = require("../config/db");
 
 /*

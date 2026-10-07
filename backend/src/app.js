@@ -1,7 +1,18 @@
 require("dotenv").config();
 
+const {
+    authenticateToken,
+    authorizeRoles
+} = require("./middleware/authMiddleware");
+
+const {
+    authorizeBranchAccess
+} = require("./middleware/branchMiddleware");
+
 const express = require("express");
 const cors = require("cors");
+
+const pool = require("./config/db");
 
 const app = express();
 
@@ -33,6 +44,61 @@ const beltRoutes = require("./routes/beltRoutes");
 
 const competitionRoutes = require("./routes/competitionRoutes");
 
+const reportRoutes = require("./routes/reportRoutes");
+
+const reportingRoutes =
+    require("./routes/reportingRoutes");
+const settingsRoutes =
+    require("./routes/settingsRoutes");
+
+const userRoutes = require("./routes/userRoutes");
+
+const branchRoutes =
+    require("./routes/branchRoutes");
+
+const parentRoutes = require("./routes/parentRoutes");
+
+const publicRoutes = require("./routes/publicRoutes");
+
+const whatsappRoutes =
+    require("./routes/whatsappRoutes");
+
+app.use(
+    "/api/whatsapp",
+    whatsappRoutes
+);
+
+app.use(
+    "/api/users",
+    userRoutes
+);
+
+app.use(
+    "/api/branches",
+    branchRoutes
+);
+
+app.use(
+    "/api/parents",
+    parentRoutes
+);
+
+app.use(
+    "/api/public",
+    publicRoutes
+);
+
+app.use(
+    "/api/settings",
+    settingsRoutes
+);
+
+app.use("/api/reports", reportRoutes);
+
+app.use(
+    "/api/reporting",
+    reportingRoutes
+);
 app.use("/api/competitions", competitionRoutes);
 
 app.use("/api/belts", beltRoutes);
@@ -84,7 +150,14 @@ app.listen(PORT, "0.0.0.0", () => {
 // RESULTS & WINNERS
 // =====================================================
 
-app.get("/api/competitions/results", async (req, res) => {
+app.get(
+    "/api/competitions/results",
+    authenticateToken,
+    authorizeRoles(
+        "SUPER_ADMIN",
+        "BRANCH_ADMIN"
+    ),
+    async (req, res) => {
 
     try {
 
@@ -138,7 +211,14 @@ app.get("/api/competitions/results", async (req, res) => {
 });
 
 
-app.post("/api/competitions/results", async (req, res) => {
+app.post(
+    "/api/competitions/results",
+    authenticateToken,
+    authorizeRoles(
+        "SUPER_ADMIN",
+        "BRANCH_ADMIN"
+    ),
+    async (req, res) => {
 
     try {
 
@@ -210,3 +290,27 @@ app.post("/api/competitions/results", async (req, res) => {
         });
     }
 });
+
+
+// ========================================
+// RBAC TEST
+// ========================================
+
+app.get(
+    "/api/rbac/test",
+    authenticateToken,
+    authorizeRoles(
+        "SUPER_ADMIN",
+        "BRANCH_ADMIN"
+    ),
+    authorizeBranchAccess,
+    (req, res) => {
+
+        res.json({
+            message: "RBAC working successfully",
+            user: req.user,
+            branch_id: req.branchId || null
+        });
+
+    }
+);

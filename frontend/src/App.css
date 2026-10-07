@@ -4018,3 +4018,269 @@
 .logout-button span {
     font-size: 16px;
 }
+
+/* ==========================================================
+   DYNAMIC BRANCH INFORMATION INSIDE DASHBOARD CARDS
+   ========================================================== */
+
+.branch-dashboard-mini-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+    max-height: 70px;
+    overflow-y: auto;
+    padding-right: 3px;
+}
+
+.branch-dashboard-mini-list::-webkit-scrollbar {
+    width: 3px;
+}
+
+.branch-dashboard-mini-list::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    background: rgba(100, 116, 139, 0.22);
+}
+
+.branch-dashboard-mini-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    min-height: 20px;
+}
+
+.branch-dashboard-mini-name {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+}
+
+.branch-dashboard-mini-name strong {
+    max-width: 145px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 9px;
+    line-height: 1.2;
+    font-weight: 700;
+}
+
+.branch-dashboard-mini-name span {
+    flex-shrink: 0;
+    font-size: 7px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: .06em;
+    opacity: .55;
+}
+
+.branch-dashboard-mini-value {
+    flex-shrink: 0;
+    min-width: 18px;
+    text-align: right;
+    font-size: 10px;
+    line-height: 1;
+    font-weight: 800;
+}
+
+@media (max-width: 1100px) {
+
+    .branch-dashboard-mini-name strong {
+        max-width: 100px;
+    }
+
+}
+
+
+/* ==========================================================
+   DYNAMIC BRANCH VALUES INSIDE EXISTING DASHBOARD CARDS
+   ========================================================== */
+
+.dashboard-branch-card-values {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+    max-height: 76px;
+    overflow-y: auto;
+    padding-right: 3px;
+}
+
+.dashboard-branch-card-values::-webkit-scrollbar {
+    width: 3px;
+}
+
+.dashboard-branch-card-values::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    background: rgba(100, 116, 139, 0.22);
+}
+
+.dashboard-branch-card-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 18px;
+}
+
+.dashboard-branch-card-name {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+}
+
+.dashboard-branch-card-name strong {
+    max-width: 145px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 9px;
+    line-height: 1.15;
+    font-weight: 700;
+}
+
+.dashboard-branch-card-name span {
+    flex-shrink: 0;
+    font-size: 7px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: .05em;
+    opacity: .55;
+}
+
+.dashboard-branch-card-number {
+    flex-shrink: 0;
+    min-width: 18px;
+    text-align: right;
+    font-size: 10px;
+    line-height: 1;
+    font-weight: 800;
+}
+
+@media (max-width: 1100px) {
+
+    .dashboard-branch-card-name strong {
+        max-width: 100px;
+    }
+
+}
+
+
+/* ==========================================================
+   SAFE BRANCH ATTENDANCE SUMMARY
+   Inside existing Today's Attendance panel
+   ========================================================== */
+
+.branch-attendance-summary {
+    margin: 0 24px 20px;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.branch-attendance-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 18px 12px;
+}
+
+.branch-attendance-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 750;
+    color: #17263f;
+}
+
+.branch-attendance-header p {
+    margin: 4px 0 0;
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.branch-attendance-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.branch-attendance-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 580px;
+}
+
+.branch-attendance-table th {
+    padding: 9px 14px;
+    text-align: left;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    color: #94a3b8;
+    background: #f8fafc;
+    border-top: 1px solid #eef2f7;
+    border-bottom: 1px solid #eef2f7;
+}
+
+.branch-attendance-table td {
+    padding: 10px 14px;
+    font-size: 11px;
+    color: #334155;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.branch-attendance-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.branch-attendance-name {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.branch-attendance-name strong {
+    font-size: 11px;
+    font-weight: 750;
+    color: #1e293b;
+}
+
+.branch-attendance-name span {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    color: #94a3b8;
+}
+
+.branch-attendance-number {
+    font-weight: 800;
+}
+
+.branch-attendance-number.present {
+    color: #16a34a;
+}
+
+.branch-attendance-number.absent {
+    color: #dc2626;
+}
+
+.branch-attendance-number.late {
+    color: #d97706;
+}
+
+.branch-attendance-rate {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 50px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 800;
+    color: #166534;
+    background: #f0fdf4;
+}
+

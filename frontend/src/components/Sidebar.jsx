@@ -119,6 +119,51 @@ const menuSections = [
     }
 ];
 
+
+const sidebarUser =
+    JSON.parse(
+        localStorage.getItem("admin_user") || "null"
+    );
+
+const sidebarUserRole =
+    sidebarUser?.role || "SUPER_ADMIN";
+
+
+const canViewSidebarItem = (label) => {
+
+    if (sidebarUserRole === "SUPER_ADMIN") {
+        return true;
+    }
+
+    if (sidebarUserRole === "BRANCH_ADMIN") {
+
+        return [
+            "Dashboard",
+            "Students",
+            "Attendance",
+            "Fees Management",
+            "Belt & Grades",
+            "Competitions",
+            "Results & Winners",
+            "Reports",
+            "Messages",
+            "Settings"
+        ].includes(label);
+
+    }
+
+    if (sidebarUserRole === "PARENT") {
+
+        return [
+            "Dashboard"
+        ].includes(label);
+
+    }
+
+    return false;
+};
+
+
 function Sidebar() {
     return (
         <aside className="sidebar">
@@ -145,7 +190,7 @@ function Sidebar() {
                             {section.title}
                         </div>
 
-                        {section.items.map((item) => (
+                        {section.items.filter(item => canViewSidebarItem(item.label)).map((item) => (
                             <NavLink
                                 key={item.to}
                                 to={item.to}
@@ -166,8 +211,27 @@ function Sidebar() {
                     </div>
                 ))}
             </nav>
+<div className="sidebar-bottom">
 
-            <div className="sidebar-bottom">
+
+                {JSON.parse(localStorage.getItem("admin_user") || "null")?.role === "SUPER_ADMIN" && (
+
+
+                <NavLink
+                    to="/admin-management"
+                    className={({ isActive }) =>
+                        `sidebar-link ${isActive ? "active" : ""}`
+                    }
+                >
+                    <span className="sidebar-icon">👥</span>
+                    <span className="sidebar-label">
+                        User Management
+                    </span>
+                </NavLink>
+
+
+                )}
+
                 <NavLink
                     to="/settings"
                     className={({ isActive }) =>
@@ -177,7 +241,9 @@ function Sidebar() {
                     <span className="sidebar-icon">
                         {icons.settings}
                     </span>
-                    <span className="sidebar-label">Settings</span>
+                    <span className="sidebar-label">
+                        Settings
+                    </span>
                 </NavLink>
 
                 <div className="admin-card">
@@ -199,11 +265,13 @@ function Sidebar() {
 
                 <div className="sidebar-version">
                     Karate Academy <span>v1.0</span>
-			<LogoutButton />
                 </div>
+                <LogoutButton />
             </div>
-        </aside>
-    );
-}
+
+
+            </aside>
+        );
+};
 
 export default Sidebar;

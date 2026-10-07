@@ -347,6 +347,9 @@ function Students() {
                                             <th>
                                                 ACTIONS
                                             </th>
+                                            <th>
+                                                BRANCH
+                                            </th>
                                         </tr>
                                     </thead>
 
@@ -461,7 +464,13 @@ function Students() {
                                                         </div>
                                                     </td>
 
-                                                </tr>
+                                                
+                                                    <td>
+                                                        <span className="student-branch-name">
+                                                            {student.branch_name || "—"}
+                                                        </span>
+                                                    </td>
+</tr>
                                             )
                                         )}
 

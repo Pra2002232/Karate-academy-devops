@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
+import BranchAttendanceSummary from "../components/BranchAttendanceSummary";
 
 function Icon({ children, className = "" }) {
     return (
@@ -514,6 +515,14 @@ const formattedDate = new Date(
                             </div>
 
                         </div>
+
+
+                        {/* BRANCH ATTENDANCE SUMMARY */}
+
+                        <BranchAttendanceSummary
+                            students={students}
+                            attendance={attendance}
+                        />
 
                         <div className="attendance-table-wrapper">
 

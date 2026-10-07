@@ -1,68 +1,214 @@
 const express = require("express");
 const pool = require("../config/db");
 
+const {
+    authenticateToken,
+    authorizeRoles
+} = require("../middleware/authMiddleware");
+
 const router = express.Router();
 
 
-// ========================================
-// GET ALL ACTIVE STUDENTS
-// ========================================
+// =====================================================
+// GET ALL STUDENTS
+// =====================================================
 
-router.get("/", async (req, res) => {
+router.get(
+    "/",
+    authenticateToken,
+    authorizeRoles(
+        "SUPER_ADMIN",
+        "BRANCH_ADMIN"
+    ),
+    async (req, res) => {
 
-    try {
+        try {
 
-        const result = await pool.query(`
-            SELECT
-                id,
-                student_code,
-                name,
-                date_of_birth,
-                gender,
-                parent_name,
-                parent_mobile,
-                address,
-                joining_date,
-                belt,
-                batch,
-                status,
-                created_at
-            FROM students
-            ORDER BY name
-        `);
+            let result;
 
-        res.json({
-            total_students: result.rows.length,
-            students: result.rows
-        });
 
-    } catch (error) {
+            if (
+                req.user.role ===
+                "SUPER_ADMIN"
+            ) {
 
-        console.error("Get Students Error:", error);
+                result = await pool.query(
+                    `
+                    SELECT
+                        s.*,
+                        b.branch_name,
+                        b.branch_code
+                    FROM students s
+                    LEFT JOIN branches b
+                        ON b.id = s.branch_id
+                    ORDER BY s.name
+                    `
+                );
 
-        res.status(500).json({
-            message: "Internal server error"
-        });
+            } else {
+
+                result = await pool.query(
+                    `
+                    SELECT
+                        s.*,
+                        b.branch_name,
+                        b.branch_code
+                    FROM students s
+                    LEFT JOIN branches b
+                        ON b.id = s.branch_id
+                    WHERE s.branch_id = $1
+                    ORDER BY s.name
+                    `,
+                    [req.user.branch_id]
+                );
+
+            }
+
+
+            res.json({
+
+                total_students:
+                    result.rows.length,
+
+                students:
+                    result.rows
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Get Students Error:",
+                error
+            );
+
+            res.status(500).json({
+                message:
+                    "Internal server error"
+            });
+
+        }
 
     }
+);
 
-});
 
-
-// ========================================
+// =====================================================
 // GET STUDENT BY ID
-// ========================================
+// =====================================================
 
-router.get("/:id", async (req, res) => {
+router.get(
+    "/:id",
+    authenticateToken,
+    authorizeRoles(
+        "SUPER_ADMIN",
+        "BRANCH_ADMIN"
+    ),
+    async (req, res) => {
 
-    try {
+        try {
 
-        const { id } = req.params;
+            const {
+                id
+            } = req.params;
 
-        const result = await pool.query(
-            `
-            SELECT
-                id,
+
+            let result;
+
+
+            if (
+                req.user.role ===
+                "SUPER_ADMIN"
+            ) {
+
+                result = await pool.query(
+                    `
+                    SELECT
+                        s.*,
+                        b.branch_name,
+                        b.branch_code
+                    FROM students s
+                    LEFT JOIN branches b
+                        ON b.id = s.branch_id
+                    WHERE s.id = $1
+                    `,
+                    [id]
+                );
+
+            } else {
+
+                result = await pool.query(
+                    `
+                    SELECT
+                        s.*,
+                        b.branch_name,
+                        b.branch_code
+                    FROM students s
+                    LEFT JOIN branches b
+                        ON b.id = s.branch_id
+                    WHERE s.id = $1
+                    AND s.branch_id = $2
+                    `,
+                    [
+                        id,
+                        req.user.branch_id
+                    ]
+                );
+
+            }
+
+
+            if (
+                result.rows.length === 0
+            ) {
+
+                return res.status(404).json({
+                    message:
+                        "Student not found"
+                });
+
+            }
+
+
+            res.json({
+                student:
+                    result.rows[0]
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Get Student Error:",
+                error
+            );
+
+            res.status(500).json({
+                message:
+                    "Internal server error"
+            });
+
+        }
+
+    }
+);
+
+
+// =====================================================
+// CREATE STUDENT
+// =====================================================
+
+router.post(
+    "/",
+    authenticateToken,
+    authorizeRoles(
+        "SUPER_ADMIN",
+        "BRANCH_ADMIN"
+    ),
+    async (req, res) => {
+
+        try {
+
+            const {
                 student_code,
                 name,
                 date_of_birth,
@@ -73,317 +219,596 @@ router.get("/:id", async (req, res) => {
                 joining_date,
                 belt,
                 batch,
-                status,
-                created_at
-            FROM students
-            WHERE id = $1
-            `,
-            [id]
-        );
-
-        if (result.rows.length === 0) {
-
-            return res.status(404).json({
-                message: "Student not found"
-            });
-
-        }
-
-        res.json({
-            student: result.rows[0]
-        });
-
-    } catch (error) {
-
-        console.error("Get Student Error:", error);
-
-        res.status(500).json({
-            message: "Internal server error"
-        });
-
-    }
-
-});
+                branch_id
+            } = req.body;
 
 
-// ========================================
-// CREATE STUDENT
-// ========================================
+            // ---------------------------------------------
+            // BASIC VALIDATION
+            // ---------------------------------------------
 
-router.post("/", async (req, res) => {
+            if (!student_code) {
 
-    try {
+                return res.status(400).json({
+                    message:
+                        "student_code is required"
+                });
 
-        const {
-            student_code,
-            name,
-            date_of_birth,
-            gender,
-            parent_name,
-            parent_mobile,
-            address,
-            joining_date,
-            belt,
-            batch
-        } = req.body;
+            }
 
+            if (!name) {
 
-        // Validation
+                return res.status(400).json({
+                    message:
+                        "name is required"
+                });
 
-        if (!student_code) {
+            }
 
-            return res.status(400).json({
-                message: "student_code is required"
-            });
+            if (!parent_name) {
 
-        }
+                return res.status(400).json({
+                    message:
+                        "parent_name is required"
+                });
 
-        if (!name) {
+            }
 
-            return res.status(400).json({
-                message: "name is required"
-            });
+            if (!parent_mobile) {
 
-        }
+                return res.status(400).json({
+                    message:
+                        "parent_mobile is required"
+                });
 
-        if (!parent_name) {
-
-            return res.status(400).json({
-                message: "parent_name is required"
-            });
-
-        }
-
-        if (!parent_mobile) {
-
-            return res.status(400).json({
-                message: "parent_mobile is required"
-            });
-
-        }
+            }
 
 
-        // Insert student
+            // ---------------------------------------------
+            // RESOLVE BRANCH
+            // ---------------------------------------------
 
-        const result = await pool.query(
-            `
-            INSERT INTO students
-            (
-                student_code,
-                name,
-                date_of_birth,
-                gender,
-                parent_name,
-                parent_mobile,
-                address,
-                joining_date,
-                belt,
-                batch
-            )
-            VALUES
-            (
-                $1, $2, $3, $4, $5,
-                $6, $7, $8, $9, $10
-            )
-            RETURNING *
-            `,
-            [
-                student_code,
-                name,
-                date_of_birth || null,
-                gender || null,
-                parent_name,
-                parent_mobile,
-                address || null,
-                joining_date || null,
-                belt || "WHITE",
-                batch || null
-            ]
-        );
+            let finalBranchId = null;
 
 
-        res.status(201).json({
+            // ---------------------------------------------
+            // BRANCH ADMIN
+            // ---------------------------------------------
 
-            message: "Student created successfully",
+            if (
+                req.user.role ===
+                "BRANCH_ADMIN"
+            ) {
 
-            student: result.rows[0]
-
-        });
-
-    } catch (error) {
-
-        console.error("Create Student Error:", error);
+                finalBranchId =
+                    req.user.branch_id ||
+                    null;
 
 
-        // Duplicate student code
+                // Handle old JWT without branch_id
+                if (!finalBranchId) {
 
-        if (error.code === "23505") {
+                    const branchUser =
+                        await pool.query(
+                            `
+                            SELECT branch_id
+                            FROM users
+                            WHERE id = $1
+                            AND role = 'BRANCH_ADMIN'
+                            AND status = 'ACTIVE'
+                            `,
+                            [req.user.id]
+                        );
 
-            return res.status(409).json({
+
+                    finalBranchId =
+                        branchUser.rows[0]
+                            ?.branch_id ||
+                        null;
+
+                }
+
+
+                if (!finalBranchId) {
+
+                    return res.status(400).json({
+                        message:
+                            "Branch Admin is not assigned to a branch"
+                    });
+
+                }
+
+            }
+
+
+            // ---------------------------------------------
+            // SUPER ADMIN
+            // ---------------------------------------------
+
+            if (
+                req.user.role ===
+                "SUPER_ADMIN"
+            ) {
+
+                finalBranchId =
+                    branch_id ||
+                    null;
+
+
+                // Existing Add Student form does not
+                // send branch_id yet.
+                // In that case use MAIN branch.
+
+                if (!finalBranchId) {
+
+                    const mainBranch =
+                        await pool.query(
+                            `
+                            SELECT id
+                            FROM branches
+                            WHERE UPPER(branch_code)
+                                  = 'MAIN'
+                            AND status = 'ACTIVE'
+                            ORDER BY id
+                            LIMIT 1
+                            `
+                        );
+
+
+                    finalBranchId =
+                        mainBranch.rows[0]
+                            ?.id ||
+                        null;
+
+                }
+
+
+                if (!finalBranchId) {
+
+                    return res.status(400).json({
+                        message:
+                            "No active MAIN branch is configured"
+                    });
+
+                }
+
+            }
+
+
+            // ---------------------------------------------
+            // VERIFY BRANCH EXISTS
+            // ---------------------------------------------
+
+            const branchCheck =
+                await pool.query(
+                    `
+                    SELECT
+                        id,
+                        branch_name,
+                        branch_code
+                    FROM branches
+                    WHERE id = $1
+                    AND status = 'ACTIVE'
+                    `,
+                    [finalBranchId]
+                );
+
+
+            if (
+                branchCheck.rows.length === 0
+            ) {
+
+                return res.status(400).json({
+                    message:
+                        "Invalid or inactive branch"
+                });
+
+            }
+
+
+            // ---------------------------------------------
+            // INSERT
+            // ---------------------------------------------
+
+            const result =
+                await pool.query(
+                    `
+                    INSERT INTO students
+                    (
+                        student_code,
+                        name,
+                        date_of_birth,
+                        gender,
+                        parent_name,
+                        parent_mobile,
+                        address,
+                        joining_date,
+                        belt,
+                        batch,
+                        branch_id
+                    )
+                    VALUES
+                    (
+                        $1,
+                        $2,
+                        $3,
+                        $4,
+                        $5,
+                        $6,
+                        $7,
+                        $8,
+                        $9,
+                        $10,
+                        $11
+                    )
+                    RETURNING *
+                    `,
+                    [
+                        student_code.trim(),
+                        name.trim(),
+                        date_of_birth || null,
+                        gender || null,
+                        parent_name.trim(),
+                        parent_mobile.trim(),
+                        address || null,
+                        joining_date || null,
+                        belt || "WHITE",
+                        batch || null,
+                        finalBranchId
+                    ]
+                );
+
+
+            res.status(201).json({
 
                 message:
-                    "Student code already exists"
+                    "Student created successfully",
 
+                student:
+                    result.rows[0]
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Create Student Error:",
+                error
+            );
+
+
+            if (
+                error.code ===
+                "23505"
+            ) {
+
+                return res.status(409).json({
+                    message:
+                        "Student code already exists"
+                });
+
+            }
+
+
+            if (
+                error.code ===
+                "23503"
+            ) {
+
+                return res.status(400).json({
+                    message:
+                        "Invalid branch assignment"
+                });
+
+            }
+
+
+            if (
+                error.code ===
+                "42501"
+            ) {
+
+                return res.status(403).json({
+                    message:
+                        "You are not allowed to create a student in this branch"
+                });
+
+            }
+
+
+            res.status(500).json({
+                message:
+                    "Internal server error"
             });
 
         }
 
-
-        res.status(500).json({
-
-            message: "Internal server error",
-
-            error: error.message
-
-        });
-
     }
+);
 
-});
 
-
-// ========================================
+// =====================================================
 // UPDATE STUDENT
-// ========================================
+// =====================================================
 
-router.put("/:id", async (req, res) => {
+router.put(
+    "/:id",
+    authenticateToken,
+    authorizeRoles(
+        "SUPER_ADMIN",
+        "BRANCH_ADMIN"
+    ),
+    async (req, res) => {
 
-    try {
+        try {
 
-        const { id } = req.params;
-
-        const {
-            name,
-            date_of_birth,
-            gender,
-            parent_name,
-            parent_mobile,
-            address,
-            belt,
-            batch,
-            status
-        } = req.body;
-
-
-        const result = await pool.query(
-            `
-            UPDATE students
-
-            SET
-                name = COALESCE($1, name),
-                date_of_birth = COALESCE($2, date_of_birth),
-                gender = COALESCE($3, gender),
-                parent_name = COALESCE($4, parent_name),
-                parent_mobile = COALESCE($5, parent_mobile),
-                address = COALESCE($6, address),
-                belt = COALESCE($7, belt),
-                batch = COALESCE($8, batch),
-                status = COALESCE($9, status)
-
-            WHERE id = $10
-
-            RETURNING *
-            `,
-            [
-                name || null,
-                date_of_birth || null,
-                gender || null,
-                parent_name || null,
-                parent_mobile || null,
-                address || null,
-                belt || null,
-                batch || null,
-                status || null,
+            const {
                 id
-            ]
-        );
+            } = req.params;
+
+            const {
+                name,
+                date_of_birth,
+                gender,
+                parent_name,
+                parent_mobile,
+                address,
+                belt,
+                batch,
+                status
+            } = req.body;
 
 
-        if (result.rows.length === 0) {
+            let result;
 
-            return res.status(404).json({
-                message: "Student not found"
+
+            if (
+                req.user.role ===
+                "SUPER_ADMIN"
+            ) {
+
+                result = await pool.query(
+                    `
+                    UPDATE students
+                    SET
+                        name =
+                            COALESCE($1, name),
+
+                        date_of_birth =
+                            COALESCE($2, date_of_birth),
+
+                        gender =
+                            COALESCE($3, gender),
+
+                        parent_name =
+                            COALESCE($4, parent_name),
+
+                        parent_mobile =
+                            COALESCE($5, parent_mobile),
+
+                        address =
+                            COALESCE($6, address),
+
+                        belt =
+                            COALESCE($7, belt),
+
+                        batch =
+                            COALESCE($8, batch),
+
+                        status =
+                            COALESCE($9, status)
+
+                    WHERE id = $10
+
+                    RETURNING *
+                    `,
+                    [
+                        name || null,
+                        date_of_birth || null,
+                        gender || null,
+                        parent_name || null,
+                        parent_mobile || null,
+                        address || null,
+                        belt || null,
+                        batch || null,
+                        status || null,
+                        id
+                    ]
+                );
+
+            } else {
+
+                result = await pool.query(
+                    `
+                    UPDATE students
+                    SET
+                        name =
+                            COALESCE($1, name),
+
+                        date_of_birth =
+                            COALESCE($2, date_of_birth),
+
+                        gender =
+                            COALESCE($3, gender),
+
+                        parent_name =
+                            COALESCE($4, parent_name),
+
+                        parent_mobile =
+                            COALESCE($5, parent_mobile),
+
+                        address =
+                            COALESCE($6, address),
+
+                        belt =
+                            COALESCE($7, belt),
+
+                        batch =
+                            COALESCE($8, batch),
+
+                        status =
+                            COALESCE($9, status)
+
+                    WHERE id = $10
+                    AND branch_id = $11
+
+                    RETURNING *
+                    `,
+                    [
+                        name || null,
+                        date_of_birth || null,
+                        gender || null,
+                        parent_name || null,
+                        parent_mobile || null,
+                        address || null,
+                        belt || null,
+                        batch || null,
+                        status || null,
+                        id,
+                        req.user.branch_id
+                    ]
+                );
+
+            }
+
+
+            if (
+                result.rows.length === 0
+            ) {
+
+                return res.status(404).json({
+                    message:
+                        "Student not found"
+                });
+
+            }
+
+
+            res.json({
+
+                message:
+                    "Student updated successfully",
+
+                student:
+                    result.rows[0]
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Update Student Error:",
+                error
+            );
+
+            res.status(500).json({
+                message:
+                    "Internal server error"
             });
 
         }
 
-
-        res.json({
-
-            message: "Student updated successfully",
-
-            student: result.rows[0]
-
-        });
-
-    } catch (error) {
-
-        console.error("Update Student Error:", error);
-
-        res.status(500).json({
-
-            message: "Internal server error",
-
-            error: error.message
-
-        });
-
     }
+);
 
-});
 
-
-// ========================================
+// =====================================================
 // DELETE STUDENT
-// ========================================
+// =====================================================
 
-router.delete("/:id", async (req, res) => {
+router.delete(
+    "/:id",
+    authenticateToken,
+    authorizeRoles(
+        "SUPER_ADMIN",
+        "BRANCH_ADMIN"
+    ),
+    async (req, res) => {
 
-    try {
+        try {
 
-        const { id } = req.params;
+            const {
+                id
+            } = req.params;
 
-
-        const result = await pool.query(
-            `
-            DELETE FROM students
-            WHERE id = $1
-            RETURNING id, student_code, name
-            `,
-            [id]
-        );
+            let result;
 
 
-        if (result.rows.length === 0) {
+            if (
+                req.user.role ===
+                "SUPER_ADMIN"
+            ) {
 
-            return res.status(404).json({
-                message: "Student not found"
+                result = await pool.query(
+                    `
+                    DELETE FROM students
+                    WHERE id = $1
+                    RETURNING id,
+                              student_code,
+                              name
+                    `,
+                    [id]
+                );
+
+            } else {
+
+                result = await pool.query(
+                    `
+                    DELETE FROM students
+                    WHERE id = $1
+                    AND branch_id = $2
+
+                    RETURNING id,
+                              student_code,
+                              name
+                    `,
+                    [
+                        id,
+                        req.user.branch_id
+                    ]
+                );
+
+            }
+
+
+            if (
+                result.rows.length === 0
+            ) {
+
+                return res.status(404).json({
+                    message:
+                        "Student not found"
+                });
+
+            }
+
+
+            res.json({
+
+                message:
+                    "Student deleted successfully",
+
+                student:
+                    result.rows[0]
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Delete Student Error:",
+                error
+            );
+
+            res.status(500).json({
+                message:
+                    "Internal server error"
             });
 
         }
 
-
-        res.json({
-
-            message: "Student deleted successfully",
-
-            student: result.rows[0]
-
-        });
-
-    } catch (error) {
-
-        console.error("Delete Student Error:", error);
-
-        res.status(500).json({
-
-            message: "Internal server error"
-
-        });
-
     }
-
-});
+);
 
 
 module.exports = router;

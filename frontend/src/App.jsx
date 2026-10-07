@@ -7,9 +7,17 @@ import Attendance from "./pages/Attendance";
 import Fees from "./pages/Fees";
 import BeltGrades from "./pages/BeltGrades";
 import Competitions from "./pages/Competitions";
+import Reports from "./pages/Reports";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminManagement from "./pages/AdminManagement";
+import UserManagement from "./pages/UserManagement";
 import Results from "./pages/Results";
+import Settings from "./pages/Settings";
+import RoleHome from "./pages/RoleHome";
+import BranchDashboard from "./pages/BranchDashboard";
+import ParentDashboard from "./pages/ParentDashboard";
+import ParentLogin from "./pages/ParentLogin";
 
 
 function ModulePage({ title, subtitle, icon }) {
@@ -51,11 +59,34 @@ function AcademyLayout() {
 
                 <Routes>
 
+                    <Route
+                        path="/parent-dashboard"
+                        element={<ParentDashboard />}
+                    />
+
+
+
+                    <Route
+                        path="/branch-dashboard"
+                        element={<BranchDashboard />}
+                    />
+
+
+
+                    <Route
+                        path="/user-management"
+                        element={
+                            <UserManagement />
+                        }
+                    />
+
+
+
                     {/* Dashboard */}
 
                     <Route
                         path="/"
-                        element={<Dashboard />}
+                        element={<RoleHome />}
                     />
 
 
@@ -110,17 +141,34 @@ function AcademyLayout() {
                     {/* Reports */}
 
                     <Route
-                        path="/reports"
-                        element={
-                            <ModulePage
-                                title="Reports"
-                                subtitle="View academy attendance, fees and student reports."
-                                icon="📊"
-                            />
-                        }
+                        path="/admin-management"
+                        element={<AdminManagement />}
                     />
 
-                </Routes>
+                    <Route
+                        path="/reports"
+                        element={ < Reports />  }
+                    />
+
+		   {/* Settings */}
+	    	   
+	    	  <Route
+  			  path="/settings"
+   			 element={<Settings />}
+			/>
+
+                
+                <Route
+                    path="/parent-login"
+                    element={<ParentLogin />}
+                />
+
+                <Route
+                    path="/parent-dashboard"
+                    element={<ParentDashboard />}
+                />
+
+</Routes>
 
             </main>
 

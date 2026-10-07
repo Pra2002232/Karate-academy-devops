@@ -1,0 +1,424 @@
+.parent-login-page {
+    min-height: 100vh;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    background: #f5f6f8;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.parent-login-hero {
+    position: relative;
+    min-height: 100vh;
+    overflow: hidden;
+    background:
+        linear-gradient(
+            135deg,
+            #05070b 0%,
+            #11151d 55%,
+            #260914 100%
+        );
+    color: white;
+    padding: 52px 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.parent-login-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(
+            circle at 25% 40%,
+            rgba(193,18,31,0.30),
+            transparent 38%
+        ),
+        radial-gradient(
+            circle at 75% 75%,
+            rgba(193,18,31,0.15),
+            transparent 35%
+        );
+}
+
+.parent-login-overlay {
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(
+            90deg,
+            rgba(4,7,11,0.25),
+            rgba(4,7,11,0.60)
+        );
+}
+
+.parent-login-brand,
+.parent-hero-copy,
+.parent-hero-values {
+    position: relative;
+    z-index: 2;
+}
+
+.parent-login-brand {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.parent-login-mark {
+    width: 52px;
+    height: 52px;
+    border-radius: 15px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(
+        145deg,
+        #e21b2d,
+        #9f101b
+    );
+    box-shadow:
+        0 10px 28px rgba(193,18,31,0.30);
+    font-size: 22px;
+}
+
+.parent-login-brand strong {
+    display: block;
+    font-size: 19px;
+    letter-spacing: 2px;
+}
+
+.parent-login-brand span {
+    display: block;
+    margin-top: 5px;
+    color: #aeb6c7;
+    font-size: 10px;
+    letter-spacing: 2.5px;
+}
+
+.parent-hero-copy {
+    max-width: 650px;
+    margin-top: auto;
+    margin-bottom: auto;
+}
+
+.parent-hero-copy > span {
+    display: inline-block;
+    color: #ff3155;
+    border-left: 3px solid #e40035;
+    padding-left: 10px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 3px;
+}
+
+.parent-hero-copy h1 {
+    margin: 17px 0 15px;
+    font-size: clamp(48px, 5.2vw, 78px);
+    line-height: .98;
+    letter-spacing: -2px;
+}
+
+.parent-hero-copy em {
+    color: #e5092f;
+    font-style: normal;
+}
+
+.parent-hero-copy p {
+    max-width: 520px;
+    color: rgba(255,255,255,.66);
+    font-size: 15px;
+    line-height: 1.8;
+}
+
+.parent-hero-values {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    max-width: 650px;
+}
+
+.parent-hero-values div {
+    border-right: 1px solid rgba(255,255,255,.13);
+    padding-right: 25px;
+    margin-right: 25px;
+}
+
+.parent-hero-values div:last-child {
+    border-right: 0;
+}
+
+.parent-hero-values b {
+    display: block;
+    color: #e5092f;
+    font-size: 22px;
+    margin-bottom: 5px;
+}
+
+.parent-hero-values span {
+    color: rgba(255,255,255,.70);
+    font-size: 11px;
+    letter-spacing: 1px;
+}
+
+.parent-login-panel {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 35px;
+    background:
+        linear-gradient(
+            135deg,
+            #f7f8fa,
+            #eef1f4
+        );
+}
+
+.parent-login-card {
+    width: min(500px, 100%);
+    padding: 42px;
+    border-radius: 26px;
+    background: rgba(255,255,255,.92);
+    border: 1px solid #e1e5eb;
+    box-shadow:
+        0 28px 75px rgba(16,24,40,.12);
+}
+
+.parent-login-card-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.parent-login-icon {
+    width: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    border-radius: 15px;
+    background: #fff0f2;
+    font-size: 24px;
+}
+
+.parent-login-card-brand strong {
+    display: block;
+    color: #172033;
+    font-size: 18px;
+}
+
+.parent-login-card-brand span {
+    display: block;
+    margin-top: 5px;
+    color: #c1121f;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 2px;
+}
+
+.parent-login-heading {
+    margin-top: 38px;
+}
+
+.parent-login-heading > span {
+    color: #c1121f;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 2.5px;
+}
+
+.parent-login-heading h2 {
+    margin: 10px 0 7px;
+    color: #172033;
+    font-size: 31px;
+}
+
+.parent-login-heading p {
+    margin: 0;
+    color: #7c8594;
+    font-size: 12px;
+}
+
+.parent-login-error {
+    margin-top: 22px;
+    padding: 11px 13px;
+    border-radius: 10px;
+    color: #a71d2a;
+    background: #fff1f2;
+    border: 1px solid #ffd5da;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.parent-login-form {
+    margin-top: 28px;
+}
+
+.parent-login-form label {
+    display: block;
+    margin-bottom: 18px;
+}
+
+.parent-login-form label > span {
+    display: block;
+    margin-bottom: 8px;
+    color: #344054;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.parent-login-input {
+    height: 54px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 0 13px;
+    border: 1px solid #d9dee7;
+    border-radius: 12px;
+    background: white;
+    transition: .2s ease;
+}
+
+.parent-login-input:focus-within {
+    border-color: #c1121f;
+    box-shadow:
+        0 0 0 4px rgba(193,18,31,.08);
+}
+
+.parent-login-input b {
+    width: 24px;
+    color: #c1121f;
+    font-size: 10px;
+    text-align: center;
+}
+
+.parent-login-input input {
+    flex: 1;
+    height: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #172033;
+    font-size: 13px;
+}
+
+.parent-login-input input::placeholder {
+    color: #a0a7b4;
+}
+
+.parent-password-toggle {
+    border: 0;
+    background: transparent;
+    color: #c1121f;
+    font-size: 9px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.parent-login-button {
+    width: 100%;
+    height: 54px;
+    margin-top: 6px;
+    border: 0;
+    border-radius: 12px;
+    background:
+        linear-gradient(
+            90deg,
+            #c1121f,
+            #94111b
+        );
+    color: white;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .2px;
+    cursor: pointer;
+    box-shadow:
+        0 12px 26px rgba(193,18,31,.22);
+    transition: .2s ease;
+}
+
+.parent-login-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow:
+        0 16px 30px rgba(193,18,31,.28);
+}
+
+.parent-login-button:disabled {
+    opacity: .7;
+    cursor: wait;
+}
+
+.parent-login-security {
+    margin-top: 26px;
+    padding: 15px;
+    display: flex;
+    gap: 10px;
+    border-radius: 13px;
+    background: #f7f8fa;
+    border: 1px solid #edf0f3;
+}
+
+.parent-login-security > span {
+    font-size: 15px;
+}
+
+.parent-login-security strong {
+    display: block;
+    color: #3b4658;
+    font-size: 10px;
+}
+
+.parent-login-security p {
+    margin: 4px 0 0;
+    color: #8d95a3;
+    font-size: 9px;
+    line-height: 1.5;
+}
+
+.parent-login-footer {
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid #edf0f3;
+    text-align: center;
+    color: #a0a7b4;
+    font-size: 8px;
+    letter-spacing: 1.5px;
+}
+
+@media (max-width: 900px) {
+
+    .parent-login-page {
+        grid-template-columns: 1fr;
+        overflow-y: auto;
+    }
+
+    .parent-login-hero {
+        min-height: 42vh;
+        padding: 28px 24px;
+    }
+
+    .parent-hero-copy {
+        margin-top: 60px;
+        margin-bottom: 50px;
+    }
+
+    .parent-hero-copy h1 {
+        font-size: 46px;
+    }
+
+    .parent-hero-values {
+        display: none;
+    }
+
+    .parent-login-panel {
+        min-height: auto;
+        padding: 20px 15px 30px;
+    }
+
+    .parent-login-card {
+        padding: 30px 24px;
+    }
+}

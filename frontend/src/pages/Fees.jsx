@@ -789,6 +789,9 @@ function Fees() {
                         <th>
                             Status
                         </th>
+                        <th>
+                            BRANCH
+                        </th>
 
                     </tr>
 
@@ -877,7 +880,13 @@ function Fees() {
 
                             </td>
 
-                        </tr>
+                        
+                        <td className="fee-branch">
+                            <span className="fee-branch-name">
+                                {fee.branch_name || "—"}
+                            </span>
+                        </td>
+</tr>
 
 		    ))}
 

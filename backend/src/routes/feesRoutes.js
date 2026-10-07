@@ -1,7 +1,19 @@
 const express = require("express");
 const pool = require("../config/db");
 
+const {
+    authenticateToken
+} = require("../middleware/authMiddleware");
+
 const router = express.Router();
+
+/*
+ * All fee/belt API calls require an authenticated
+ * academy user. This also establishes the PostgreSQL
+ * role/branch request context used by RLS.
+ */
+router.use(authenticateToken);
+
 
 const ALLOWED_FEE_TYPES = [
     "MONTHLY",
@@ -16,12 +28,42 @@ const ALLOWED_STATUS = [
 
 
 // ==================================================
+// ==================================================
 // 1. GET ALL FEES
 // ==================================================
 
 router.get("/", async (req, res) => {
 
     try {
+
+        const params = [];
+        let branchFilter = "";
+
+        /*
+         * SUPER_ADMIN:
+         *   Can see fees from all branches.
+         *
+         * BRANCH_ADMIN:
+         *   Can only see fees belonging to students
+         *   from the admin's assigned branch.
+         *
+         * Branch is derived from:
+         * fees.student_id
+         *      -> students.branch_id
+         *      -> branches.id
+         */
+
+        if (req.user.role === "BRANCH_ADMIN") {
+
+            if (!req.user.branch_id) {
+                return res.status(403).json({
+                    message: "Branch Admin is not assigned to a branch"
+                });
+            }
+
+            branchFilter = "WHERE s.branch_id = $1";
+            params.push(req.user.branch_id);
+        }
 
         const result = await pool.query(`
             SELECT
@@ -31,6 +73,10 @@ router.get("/", async (req, res) => {
                 s.name AS student_name,
                 s.parent_name,
                 s.parent_mobile,
+
+                s.branch_id,
+                b.branch_name,
+                b.branch_code,
 
                 f.fee_type,
                 f.description,
@@ -48,10 +94,15 @@ router.get("/", async (req, res) => {
             JOIN students s
                 ON f.student_id = s.id
 
+            LEFT JOIN branches b
+                ON s.branch_id = b.id
+
+            ${branchFilter}
+
             ORDER BY
                 f.created_at DESC,
                 s.name
-        `);
+        `, params);
 
         res.json({
             total_fees: result.rows.length,
@@ -81,6 +132,26 @@ router.get("/student/:studentId", async (req, res) => {
 
         const { studentId } = req.params;
 
+        const params = [studentId];
+        let branchFilter = "";
+
+        /*
+         * BRANCH_ADMIN can only access students
+         * belonging to their assigned branch.
+         */
+
+        if (req.user.role === "BRANCH_ADMIN") {
+
+            if (!req.user.branch_id) {
+                return res.status(403).json({
+                    message: "Branch Admin is not assigned to a branch"
+                });
+            }
+
+            branchFilter = "AND s.branch_id = $2";
+            params.push(req.user.branch_id);
+        }
+
         const result = await pool.query(`
             SELECT
                 f.id,
@@ -89,6 +160,10 @@ router.get("/student/:studentId", async (req, res) => {
                 s.name AS student_name,
                 s.parent_name,
                 s.parent_mobile,
+
+                s.branch_id,
+                b.branch_name,
+                b.branch_code,
 
                 f.fee_type,
                 f.description,
@@ -106,13 +181,17 @@ router.get("/student/:studentId", async (req, res) => {
             JOIN students s
                 ON f.student_id = s.id
 
+            LEFT JOIN branches b
+                ON s.branch_id = b.id
+
             WHERE f.student_id = $1
+            ${branchFilter}
 
             ORDER BY
                 f.year DESC NULLS LAST,
                 f.month DESC NULLS LAST,
                 f.created_at DESC
-        `, [studentId]);
+        `, params);
 
         res.json({
             student_id: studentId,
@@ -134,10 +213,6 @@ router.get("/student/:studentId", async (req, res) => {
 
 });
 
-
-// ==================================================
-// 3. CREATE FEE
-// ==================================================
 
 router.post("/", async (req, res) => {
 
