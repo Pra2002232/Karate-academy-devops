@@ -89,6 +89,28 @@ router.post("/", async (req, res) => {
         );
 
 
+        // --------------------------------------------------
+        // Student must have joined on/before attendance date
+        // --------------------------------------------------
+
+        const joiningDate =
+            studentResult.rows[0]?.joining_date;
+
+        if (
+            joiningDate &&
+            String(attendance_date) <
+            String(joiningDate)
+        ) {
+            return res.status(400).json({
+                message:
+                    "Attendance cannot be marked before the student's joining date.",
+                joining_date:
+                    joiningDate,
+                attendance_date:
+                    attendance_date
+            });
+        }
+
         if (studentResult.rows.length === 0) {
 
             return res.status(404).json({
@@ -231,6 +253,7 @@ router.get("/date/:date", async (req, res) => {
                 ON s.branch_id = b.id
 
             WHERE a.attendance_date = $1
+              AND s.joining_date <= $1
 
             ORDER BY s.name
             `,

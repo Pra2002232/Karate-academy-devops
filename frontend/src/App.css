@@ -4284,3 +4284,408 @@
     background: #f0fdf4;
 }
 
+
+/* =========================================================
+   GLOBAL MODULE TOPBAR V2
+========================================================= */
+
+.module-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+
+    height: 74px;
+
+    padding: 0 30px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    background: rgba(255, 255, 255, 0.97);
+
+    border-bottom: 1px solid #e8ebf0;
+
+    backdrop-filter: blur(14px);
+}
+
+/* =========================================================
+   BREADCRUMB
+========================================================= */
+
+.module-breadcrumb {
+    display: flex;
+    align-items: baseline;
+
+    min-width: 0;
+
+    white-space: nowrap;
+}
+
+.module-breadcrumb-root {
+    color: #202938;
+
+    font-size: 16px;
+    font-weight: 400;
+
+    letter-spacing: -0.2px;
+}
+
+.module-breadcrumb-separator {
+    margin: 0 4px;
+
+    color: #8b95a5;
+
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.module-breadcrumb-current {
+    color: #172033;
+
+    font-size: 17px;
+    font-weight: 800;
+
+    letter-spacing: -0.25px;
+}
+
+/* =========================================================
+   NOTIFICATIONS
+========================================================= */
+
+.module-topbar .icon-button {
+    position: relative;
+
+    width: 40px;
+    height: 40px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border: 0;
+
+    border-radius: 10px;
+
+    background: transparent;
+
+    color: #687386;
+
+    cursor: pointer;
+}
+
+.module-topbar .icon-button:hover {
+    background: #f4f6f8;
+}
+
+.module-topbar .module-topbar-icon {
+    width: 20px;
+    height: 20px;
+}
+
+.module-topbar .notification-dot {
+    position: absolute;
+
+    top: 7px;
+    right: 7px;
+
+    width: 6px;
+    height: 6px;
+
+    border-radius: 50%;
+
+    background: #c8102e;
+
+    border: 1.5px solid #ffffff;
+}
+
+/* =========================================================
+   DIVIDER
+========================================================= */
+
+.module-topbar .topbar-divider {
+    width: 1px;
+    height: 30px;
+
+    background: #e2e6eb;
+}
+
+/* =========================================================
+   USER AREA
+========================================================= */
+
+.module-topbar .topbar-user {
+    display: flex;
+
+    align-items: center;
+
+    gap: 11px;
+
+    cursor: pointer;
+}
+
+/*
+ * FIX:
+ * Force the avatar to remain a perfect circle.
+ * No width collapse, no oval/sliver.
+ */
+
+.module-topbar .topbar-avatar {
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+
+    flex: 0 0 40px;
+
+    aspect-ratio: 1 / 1;
+
+    box-sizing: border-box;
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50% !important;
+
+    overflow: hidden;
+
+    background:
+        linear-gradient(
+            135deg,
+            #d92535,
+            #a90e1d
+        );
+
+    color: #ffffff;
+
+    font-size: 13px;
+
+    font-weight: 800;
+
+    line-height: 1;
+
+    text-align: center;
+
+    padding: 0;
+
+    margin: 0;
+}
+
+.module-topbar .topbar-user-info {
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    min-width: 120px;
+}
+
+.module-topbar .topbar-user-info strong {
+    color: #263044;
+
+    font-size: 12px;
+
+    line-height: 1.25;
+
+    font-weight: 750;
+
+    white-space: nowrap;
+}
+
+.module-topbar .topbar-user-info span {
+    margin-top: 3px;
+
+    color: #929aaa;
+
+    font-size: 10px;
+
+    line-height: 1.2;
+
+    white-space: nowrap;
+}
+
+.module-topbar .chevron {
+    width: 17px;
+    height: 17px;
+
+    color: #1d2b42;
+
+    margin-left: 4px;
+}
+
+.module-topbar .topbar-right {
+    display: flex;
+
+    align-items: center;
+
+    gap: 17px;
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 700px) {
+
+    .module-topbar {
+        height: 64px;
+
+        padding: 0 16px;
+    }
+
+    .module-breadcrumb-root {
+        font-size: 13px;
+    }
+
+    .module-breadcrumb-separator {
+        margin: 0 2px;
+
+        font-size: 13px;
+    }
+
+    .module-breadcrumb-current {
+        font-size: 14px;
+    }
+
+    .module-topbar .topbar-user-info,
+    .module-topbar .topbar-divider {
+        display: none;
+    }
+
+    .module-topbar .topbar-avatar {
+        width: 36px !important;
+        min-width: 36px !important;
+        max-width: 36px !important;
+
+        height: 36px !important;
+        min-height: 36px !important;
+        max-height: 36px !important;
+
+        flex: 0 0 36px;
+
+        font-size: 12px;
+    }
+}
+
+
+/* =========================================================
+   LIVE COMPETITIONS INSIDE UPCOMING EVENTS
+========================================================= */
+
+.live-competition-item {
+    cursor: pointer;
+
+    transition:
+        background 0.18s ease,
+        transform 0.18s ease;
+}
+
+.live-competition-item:hover {
+    background: #fbfcfe;
+
+    transform: translateY(-1px);
+}
+
+.live-competition-arrow {
+    margin-left: auto;
+
+    color: #aab3c0;
+
+    font-size: 16px;
+}
+
+
+/* =========================================================
+   BRANCH DASHBOARD UPCOMING COMPETITIONS
+========================================================= */
+
+.branch-upcoming-competitions {
+    margin-bottom: 20px;
+
+    background: #ffffff;
+
+    border:
+        1px solid #e8ebf0;
+
+    border-radius: 18px;
+
+    box-shadow:
+        0 5px 18px
+        rgba(25, 38, 59, 0.05);
+
+    overflow: hidden;
+}
+
+.branch-upcoming-header {
+    padding: 18px 20px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    border-bottom:
+        1px solid #eff1f4;
+}
+
+.branch-upcoming-header h2 {
+    margin: 0;
+
+    color: #273044;
+
+    font-size: 14px;
+
+    font-weight: 800;
+}
+
+.branch-upcoming-header p {
+    margin: 4px 0 0;
+
+    color: #98a0ad;
+
+    font-size: 9px;
+}
+
+.branch-upcoming-header a {
+    color: #c8102e;
+
+    font-size: 9px;
+
+    font-weight: 800;
+
+    text-decoration: none;
+}
+
+.competition-card-clickable {
+    cursor: pointer;
+
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+.competition-card-clickable:hover {
+    transform: translateY(-3px);
+
+    box-shadow:
+        0 14px 34px
+        rgba(17, 35, 63, 0.10);
+}
+
+.competition-branch-label {
+    margin-top: 6px;
+
+    color: #7d8796;
+
+    font-size: 10px;
+
+    font-weight: 700;
+}
+

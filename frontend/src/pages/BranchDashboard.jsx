@@ -3,6 +3,9 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import "./BranchDashboard.css";
 
+import CompetitionDashboardWidget from "../components/CompetitionDashboardWidget";
+import LiveUpcomingCompetitions from "../components/LiveUpcomingCompetitions";
+import BranchUpcomingCompetitions from "../components/BranchUpcomingCompetitions";
 export default function BranchDashboard() {
 
     const user = JSON.parse(
@@ -102,6 +105,44 @@ export default function BranchDashboard() {
 
         return (
             <div className="branch-dashboard-page">
+
+            <BranchUpcomingCompetitions />
+
+
+                
+                <section className="branch-upcoming-competitions">
+
+                    <div className="branch-upcoming-header">
+
+                        <div>
+
+                            <h2>
+                                Upcoming Competitions
+                            </h2>
+
+                            <p>
+                                Your branch competition schedule
+                            </p>
+
+                        </div>
+
+                        <a href="/competitions">
+                            Manage →
+                        </a>
+
+                    </div>
+
+                    <div className="events-list branch-events-list">
+
+                        <LiveUpcomingCompetitions
+                            compact={true}
+                        />
+
+                    </div>
+
+                </section>
+
+                <CompetitionDashboardWidget />
                 <div className="branch-access-card">
                     <h2>Access Restricted</h2>
                     <p>

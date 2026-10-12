@@ -24,8 +24,27 @@ router.get(
 
         try {
 
-            let result;
+            const requestedDate =
+                req.query.date || null;
 
+            // If no date is supplied, use today.
+            const effectiveDate =
+                requestedDate ||
+                new Date().toISOString().slice(0, 10);
+
+            // Validate YYYY-MM-DD
+            if (
+                !/^\d{4}-\d{2}-\d{2}$/.test(
+                    effectiveDate
+                )
+            ) {
+                return res.status(400).json({
+                    message:
+                        "Invalid date. Use YYYY-MM-DD"
+                });
+            }
+
+            let result;
 
             if (
                 req.user.role ===
@@ -41,8 +60,12 @@ router.get(
                     FROM students s
                     LEFT JOIN branches b
                         ON b.id = s.branch_id
+                    WHERE s.joining_date <= $1
                     ORDER BY s.name
-                    `
+                    `,
+                    [
+                        effectiveDate
+                    ]
                 );
 
             } else {
@@ -57,18 +80,24 @@ router.get(
                     LEFT JOIN branches b
                         ON b.id = s.branch_id
                     WHERE s.branch_id = $1
+                      AND s.joining_date <= $2
                     ORDER BY s.name
                     `,
-                    [req.user.branch_id]
+                    [
+                        req.user.branch_id,
+                        effectiveDate
+                    ]
                 );
 
             }
-
 
             res.json({
 
                 total_students:
                     result.rows.length,
+
+                date:
+                    effectiveDate,
 
                 students:
                     result.rows
@@ -91,7 +120,6 @@ router.get(
 
     }
 );
-
 
 // =====================================================
 // GET STUDENT BY ID

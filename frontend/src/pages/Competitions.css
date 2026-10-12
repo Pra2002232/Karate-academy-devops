@@ -649,3 +649,173 @@
         width: 100%;
     }
 }
+
+/* =========================================================
+   BRANCH-AWARE COMPETITION CARDS
+========================================================= */
+
+.competition-card-clickable {
+    cursor: pointer;
+
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+.competition-card-clickable:hover {
+    transform: translateY(-3px);
+
+    box-shadow:
+        0 14px 35px
+        rgba(17, 35, 63, 0.10);
+}
+
+.competition-branch {
+    margin-top: 6px;
+
+    color: #7e8998;
+
+    font-size: 10px;
+
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   FINAL COMPETITION CARD BEHAVIOR
+========================================================= */
+
+.competition-card-clickable {
+    cursor: pointer;
+
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+.competition-card-clickable:hover {
+    transform: translateY(-3px);
+
+    box-shadow:
+        0 14px 34px
+        rgba(17, 35, 63, 0.10);
+}
+
+.competition-branch {
+    margin-top: 6px;
+
+    color: #7d8796;
+
+    font-size: 10px;
+
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   CLEAN COMPETITION CARD
+========================================================= */
+
+.competition-card-clickable {
+    cursor: pointer;
+
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+.competition-card-clickable:hover {
+    transform: translateY(-3px);
+
+    box-shadow:
+        0 14px 34px
+        rgba(17, 35, 63, 0.10);
+}
+
+.competition-branch-label {
+    margin-top: 6px;
+
+    color: #7d8796;
+
+    font-size: 10px;
+
+    font-weight: 700;
+}
+
+
+
+/* Competition fee management */
+.competition-fee-management {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid #e8ebf2;
+}
+.competition-fee-heading h3 {
+    margin: 0;
+    color: #202b40;
+    font-size: 16px;
+}
+.competition-fee-heading p,
+.competition-fee-empty {
+    margin: 7px 0 14px;
+    color: #7d879a;
+    font-size: 12px;
+}
+.competition-fee-list {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+.competition-fee-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px;
+    border: 1px solid #e8ebf2;
+    border-radius: 12px;
+}
+.competition-fee-student {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.competition-fee-student strong {
+    color: #263247;
+    font-size: 13px;
+}
+.competition-fee-student span {
+    color: #7d879a;
+    font-size: 11px;
+}
+.competition-fee-button {
+    min-height: 36px;
+    padding: 0 13px;
+    border: 0;
+    border-radius: 9px;
+    background: #157347;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.competition-fee-button:disabled {
+    cursor: wait;
+    opacity: .65;
+}
+.competition-fee-completed {
+    padding: 7px 10px;
+    border-radius: 999px;
+    background: #e7f7ee;
+    color: #157347;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+@media (max-width: 560px) {
+    .competition-fee-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}

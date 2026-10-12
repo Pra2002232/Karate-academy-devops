@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import "./ParentDashboard.css";
 
+import ParentUpcomingCompetitions from "../components/ParentUpcomingCompetitions";
 function formatDate(value) {
 
     if (!value) return "—";
@@ -64,7 +65,50 @@ export default function ParentDashboard() {
     const [loading, setLoading] =
         useState(true);
 
-    const [error, setError] =
+    
+const [parentCompetitions, setParentCompetitions] = useState([]);
+
+useEffect(() => {
+    let active = true;
+
+    const loadParentCompetitions = async () => {
+        try {
+            const response = await api.get("/parents/upcoming-competitions");
+            const rows = response.data?.competitions;
+
+            if (active) {
+                setParentCompetitions(
+                    Array.isArray(rows) ? rows : []
+                );
+            }
+        } catch (error) {
+            console.error(
+                "Unable to refresh parent competitions:",
+                error
+            );
+        }
+    };
+
+    loadParentCompetitions();
+
+    const timer = window.setInterval(
+        loadParentCompetitions,
+        30000
+    );
+
+    window.addEventListener("focus", loadParentCompetitions);
+
+    return () => {
+        active = false;
+        window.clearInterval(timer);
+        window.removeEventListener(
+            "focus",
+            loadParentCompetitions
+        );
+    };
+}, []);
+
+const [error, setError] =
         useState("");
 
 
@@ -328,12 +372,22 @@ export default function ParentDashboard() {
             };
 
 
-    const upcomingCompetitions =
-        selectedChild.competitions
-            ?.upcoming || [];
+    
+const upcomingCompetitions = parentCompetitions
+    .filter(competition =>
+        (competition.eligible_student_ids || []).some(
+            id => String(id) === String(selectedChild.id)
+        )
+    )
+    .map(competition => ({
+        ...competition,
+        participating: (competition.participating_student_ids || []).some(
+            id => String(id) === String(selectedChild.id)
+        )
+    }));
 
 
-    const results =
+const results =
         selectedChild.competitions
             ?.results || [];
 
@@ -1051,73 +1105,7 @@ export default function ParentDashboard() {
                         </div>
 
 
-                        <div className="parent-competition-list">
-
-                            {upcomingCompetitions.length === 0 ? (
-
-                                <div className="parent-empty-row">
-                                    No upcoming competitions.
-                                </div>
-
-                            ) : (
-
-                                upcomingCompetitions
-                                    .slice(0, 8)
-                                    .map(item => (
-
-                                        <div
-                                            className="parent-competition-item"
-                                            key={item.id}
-                                        >
-
-                                            <div className="parent-date-box">
-
-                                                <b>
-                                                    {new Date(
-                                                        `${String(item.date).slice(0, 10)}T00:00:00`
-                                                    ).getDate()}
-                                                </b>
-
-                                                <span>
-                                                    {new Date(
-                                                        `${String(item.date).slice(0, 10)}T00:00:00`
-                                                    ).toLocaleDateString(
-                                                        "en-IN",
-                                                        {
-                                                            month: "short"
-                                                        }
-                                                    )}
-                                                </span>
-
-                                            </div>
-
-                                            <div>
-
-                                                <strong>
-                                                    {item.name}
-                                                </strong>
-
-                                                <span>
-                                                    {item.location || "Location to be announced"}
-                                                </span>
-
-                                                {item.participating && (
-
-                                                    <em>
-                                                        Registered participant
-                                                    </em>
-
-                                                )}
-
-                                            </div>
-
-                                        </div>
-
-                                    ))
-
-                            )}
-
-                        </div>
+                        <ParentUpcomingCompetitions />
 
                     </div>
 

@@ -633,4 +633,380 @@ router.delete("/:id", async (req, res) => {
 });
 
 
+
+// ==================================================
+// SUPER ADMIN FEE COLLECTION DASHBOARD
+// GET /api/fees/dashboard
+//
+// READ ONLY.
+// Existing fee creation/update and WhatsApp
+// pending-fee mechanism are intentionally untouched.
+// ==================================================
+
+router.get("/dashboard", async (req, res) => {
+
+    try {
+
+        if (
+            !req.user ||
+            req.user.role !== "SUPER_ADMIN"
+        ) {
+
+            return res.status(403).json({
+                message:
+                    "Super Admin access required"
+            });
+
+        }
+
+        // --------------------------------------------------
+        // Overall academy collection
+        // --------------------------------------------------
+
+        const summaryResult =
+            await pool.query(`
+                SELECT
+
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN f.paid_date::date =
+                                     CURRENT_DATE
+                                THEN f.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS today,
+
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN f.paid_date::date =
+                                     CURRENT_DATE - 1
+                                THEN f.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS yesterday,
+
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN f.paid_date::date >=
+                                     CURRENT_DATE - 6
+                                THEN f.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS last_7_days,
+
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN f.paid_date::date >=
+                                     CURRENT_DATE - 29
+                                THEN f.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS last_30_days,
+
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN date_trunc(
+                                    'month',
+                                    f.paid_date
+                                ) =
+                                date_trunc(
+                                    'month',
+                                    CURRENT_DATE
+                                )
+                                THEN f.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS this_month,
+
+                    COALESCE(
+                        SUM(f.amount),
+                        0
+                    ) AS total_collected
+
+                FROM fees f
+
+                JOIN students s
+                    ON s.id = f.student_id
+
+                WHERE f.status = 'COMPLETED'
+                  AND f.paid_date IS NOT NULL
+                  AND s.joining_date <=
+                      f.paid_date::date
+            `);
+
+        // --------------------------------------------------
+        // Branch-wise collection
+        // --------------------------------------------------
+
+        const branchResult =
+            await pool.query(`
+                SELECT
+
+                    b.id AS branch_id,
+                    b.branch_name,
+                    b.branch_code,
+
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN f.paid_date::date =
+                                     CURRENT_DATE
+                                THEN f.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS today,
+
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN f.paid_date::date =
+                                     CURRENT_DATE - 1
+                                THEN f.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS yesterday,
+
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN f.paid_date::date >=
+                                     CURRENT_DATE - 6
+                                THEN f.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS last_7_days,
+
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN f.paid_date::date >=
+                                     CURRENT_DATE - 29
+                                THEN f.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS last_30_days,
+
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN date_trunc(
+                                    'month',
+                                    f.paid_date
+                                ) =
+                                date_trunc(
+                                    'month',
+                                    CURRENT_DATE
+                                )
+                                THEN f.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS this_month,
+
+                    COALESCE(
+                        SUM(f.amount),
+                        0
+                    ) AS total_collected
+
+                FROM branches b
+
+                LEFT JOIN students s
+                    ON s.branch_id = b.id
+
+                LEFT JOIN fees f
+                    ON f.student_id = s.id
+                   AND f.status = 'COMPLETED'
+                   AND f.paid_date IS NOT NULL
+                   AND s.joining_date <=
+                       f.paid_date::date
+
+                WHERE b.status = 'ACTIVE'
+
+                GROUP BY
+                    b.id,
+                    b.branch_name,
+                    b.branch_code
+
+                ORDER BY
+                    b.branch_name
+            `);
+
+        // --------------------------------------------------
+        // Fee type summary
+        // --------------------------------------------------
+
+        const typeResult =
+            await pool.query(`
+                SELECT
+
+                    f.fee_type,
+
+                    COALESCE(
+                        SUM(f.amount),
+                        0
+                    ) AS total_collected,
+
+                    COUNT(*) AS payment_count
+
+                FROM fees f
+
+                JOIN students s
+                    ON s.id = f.student_id
+
+                WHERE f.status = 'COMPLETED'
+                  AND f.paid_date IS NOT NULL
+                  AND s.joining_date <=
+                      f.paid_date::date
+
+                GROUP BY
+                    f.fee_type
+
+                ORDER BY
+                    f.fee_type
+            `);
+
+        const summary =
+            summaryResult.rows[0] || {};
+
+        res.json({
+
+            summary: {
+
+                today:
+                    Number(
+                        summary.today || 0
+                    ),
+
+                yesterday:
+                    Number(
+                        summary.yesterday || 0
+                    ),
+
+                last_7_days:
+                    Number(
+                        summary.last_7_days || 0
+                    ),
+
+                last_30_days:
+                    Number(
+                        summary.last_30_days || 0
+                    ),
+
+                this_month:
+                    Number(
+                        summary.this_month || 0
+                    ),
+
+                total_collected:
+                    Number(
+                        summary.total_collected || 0
+                    )
+            },
+
+            branches:
+                branchResult.rows.map(
+                    row => ({
+
+                        branch_id:
+                            row.branch_id,
+
+                        branch_name:
+                            row.branch_name,
+
+                        branch_code:
+                            row.branch_code,
+
+                        today:
+                            Number(
+                                row.today || 0
+                            ),
+
+                        yesterday:
+                            Number(
+                                row.yesterday || 0
+                            ),
+
+                        last_7_days:
+                            Number(
+                                row.last_7_days || 0
+                            ),
+
+                        last_30_days:
+                            Number(
+                                row.last_30_days || 0
+                            ),
+
+                        this_month:
+                            Number(
+                                row.this_month || 0
+                            ),
+
+                        total_collected:
+                            Number(
+                                row.total_collected || 0
+                            )
+                    })
+                ),
+
+            fee_types:
+                typeResult.rows.map(
+                    row => ({
+
+                        fee_type:
+                            row.fee_type,
+
+                        total_collected:
+                            Number(
+                                row.total_collected || 0
+                            ),
+
+                        payment_count:
+                            Number(
+                                row.payment_count || 0
+                            )
+                    })
+                )
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Fee dashboard error:",
+            error
+        );
+
+        res.status(500).json({
+            message:
+                "Unable to load fee dashboard"
+        });
+
+    }
+
+});
+
+
 module.exports = router;

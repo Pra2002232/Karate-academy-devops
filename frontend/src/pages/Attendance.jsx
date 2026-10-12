@@ -43,7 +43,7 @@ function Attendance() {
 
         const [studentsResponse, attendanceResponse] =
             await Promise.all([
-                api.get("/students"),
+                api.get("/students", { params: { date: date } }),
                 api.get(`/attendance/date/${date}`)
             ]);
 

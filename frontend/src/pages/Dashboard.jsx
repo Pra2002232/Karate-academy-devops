@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import api from "../services/api";
 import BranchAttendanceSummary from "../components/BranchAttendanceSummary";
 
+import ModuleTopBar from "../components/ModuleTopBar";
+import LiveUpcomingCompetitions from "../components/LiveUpcomingCompetitions";
 function Icon({ children, className = "" }) {
     return (
         <svg
@@ -22,6 +24,32 @@ function Dashboard() {
     const [students, setStudents] = useState([]);
     const [attendance, setAttendance] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    const [feeSummary, setFeeSummary] = useState({});
+    const [feeBranches, setFeeBranches] = useState([]);
+    const [feeTypes, setFeeTypes] = useState([]);
+    const [showFeeCollection, setShowFeeCollection] =
+        useState(false);
+
+    const storedUser = (() => {
+
+        try {
+
+            return JSON.parse(
+                localStorage.getItem("admin_user") ||
+                "{}"
+            );
+
+        } catch {
+
+            return {};
+
+        }
+
+    })();
+
+    const isSuperAdmin =
+        storedUser.role === "SUPER_ADMIN";
 
     const today = new Date();
 
@@ -48,19 +76,52 @@ const formattedDate = new Date(
         try {
             setLoading(true);
 
-            const [studentsResponse, attendanceResponse] =
+            const [studentsResponse, attendanceResponse, feeResponse] =
                 await Promise.all([
-                    api.get("/students"),
-                    api.get(`/attendance/date/${date}`)
+
+                    api.get("/students", {
+                        params: { date }
+                    }),
+
+                    api.get(
+                        `/attendance/date/${date}`
+                    ),
+
+                    isSuperAdmin
+                        ? api.get("/fees/dashboard")
+                        : Promise.resolve({
+                            data: {
+                                summary: {},
+                                branches: [],
+                                fee_types: []
+                            }
+                        })
                 ]);
 
-            setStudents(studentsResponse.data.students || []);
-            setAttendance(attendanceResponse.data.attendance || []);
+            setStudents(
+                studentsResponse.data.students || []
+            );
+
+            setAttendance(
+                attendanceResponse.data.attendance || []
+            );
+
+            setFeeSummary(
+                feeResponse.data.summary || {}
+            );
+
+            setFeeBranches(
+                feeResponse.data.branches || []
+            );
+
+            setFeeTypes(
+                feeResponse.data.fee_types || []
+            );
         } catch (error) {
             console.error("Dashboard loading error:", error);
 
             try {
-                const studentsResponse = await api.get("/students");
+                const studentsResponse = await api.get("/students", { params: { date } });
                 setStudents(studentsResponse.data.students || []);
             } catch (studentError) {
                 console.error(studentError);
@@ -126,48 +187,7 @@ const formattedDate = new Date(
         <div className="dashboard-page">
 
             {/* TOP BAR */}
-            <header className="topbar">
-
-                <div className="mobile-brand">
-                    <div className="mobile-brand-symbol">
-                        拳
-                    </div>
-
-                    <div>
-                        <strong>KARATE</strong>
-                        <span>ACADEMY</span>
-                    </div>
-                </div>
-
-                <div className="topbar-right">
-
-                    <button className="icon-button">
-                        <Icon>
-                            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-                            <path d="M10 21h4" />
-                        </Icon>
-
-                        <span className="notification-dot"></span>
-                    </button>
-
-                    <div className="topbar-divider"></div>
-
-                    <div className="topbar-user">
-                        <div className="topbar-avatar">
-                            A
-                        </div>
-
-                        <div className="topbar-user-info">
-                            <strong>Academy Admin</strong>
-                            <span>Administrator</span>
-                        </div>
-
-                        <Icon className="chevron">
-                            <path d="m6 9 6 6 6-6" />
-                        </Icon>
-                    </div>
-                </div>
-            </header>
+            <ModuleTopBar moduleName="Dashboard" />
 
             <div className="dashboard-container">
 
@@ -320,7 +340,41 @@ const formattedDate = new Date(
                         </div>
                     </div>
 
-                    <div className="premium-stat-card fees-card">
+                    <div
+                        className="premium-stat-card fees-card fee-card-clickable"
+                        onClick={() => {
+                            if (isSuperAdmin) {
+                                setShowFeeCollection(true);
+                            }
+                        }}
+                        onKeyDown={(event) => {
+
+                            if (
+                                isSuperAdmin &&
+                                (
+                                    event.key === "Enter" ||
+                                    event.key === " "
+                                )
+                            ) {
+
+                                event.preventDefault();
+
+                                setShowFeeCollection(true);
+
+                            }
+
+                        }}
+                        role={
+                            isSuperAdmin
+                                ? "button"
+                                : undefined
+                        }
+                        tabIndex={
+                            isSuperAdmin
+                                ? 0
+                                : undefined
+                        }
+                    >
                         <div className="stat-card-top">
                             <div className="stat-icon-wrapper">
                                 <Icon>
@@ -338,12 +392,22 @@ const formattedDate = new Date(
                         </div>
 
                         <div className="stat-value">
-                            ₹0
+                            ₹{
+                                Number(
+                                    feeSummary.this_month || 0
+                                ).toLocaleString("en-IN")
+                            }
                         </div>
 
                         <div className="stat-bottom">
                             <span className="trend neutral">
-                                No payments
+                                {
+                                    Number(
+                                        feeSummary.this_month || 0
+                                    ) > 0
+                                        ? "Collected"
+                                        : "No payments"
+                                }
                             </span>
 
                             <span>this month</span>
@@ -451,8 +515,7 @@ const formattedDate = new Date(
 
                     </div>
                 </section>
-
-                {/* LOWER GRID */}
+{/* LOWER GRID */}
                 <section className="dashboard-lower-grid">
 
                     {/* ATTENDANCE */}
@@ -639,8 +702,8 @@ const formattedDate = new Date(
 
                         <div className="panel-header">
                             <div>
-                                <h2>Upcoming Events</h2>
-                                <p>Academy schedule</p>
+                                <h2>Upcoming Competitions &amp; Events</h2>
+                                <p>Academy schedule &amp; competitions</p>
                             </div>
 
                             <a href="/competitions">
@@ -649,6 +712,7 @@ const formattedDate = new Date(
                         </div>
 
                         <div className="events-list">
+                            <LiveUpcomingCompetitions />
 
                             <div className="event-item">
 
@@ -812,6 +876,611 @@ const formattedDate = new Date(
                     </div>
 
                 </section>
+
+            {showFeeCollection && isSuperAdmin && (
+                <div
+                    className="fee-collection-overlay"
+                    onClick={() =>
+                        setShowFeeCollection(false)
+                    }
+                >
+
+                    <div
+                        className="fee-collection-modal"
+                        onClick={(event) =>
+                            event.stopPropagation()
+                        }
+                    >
+
+                        <style>{`
+
+                            .fee-collection-overlay {
+                                position: fixed;
+                                inset: 0;
+                                z-index: 9999;
+                                background:
+                                    rgba(8,15,28,.62);
+                                backdrop-filter:
+                                    blur(8px);
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                padding: 24px;
+                            }
+
+                            .fee-collection-modal {
+                                width: min(1200px,96vw);
+                                max-height: 90vh;
+                                overflow-y: auto;
+                                background: #fff;
+                                border-radius: 24px;
+                                padding: 28px;
+                                box-shadow:
+                                    0 30px 80px
+                                    rgba(0,0,0,.25);
+                            }
+
+                            .fee-modal-header {
+                                display: flex;
+                                justify-content:
+                                    space-between;
+                                align-items:
+                                    flex-start;
+                                margin-bottom: 24px;
+                            }
+
+                            .fee-modal-eyebrow {
+                                color: #c8102e;
+                                font-size: 11px;
+                                font-weight: 800;
+                                letter-spacing: 1.5px;
+                                text-transform: uppercase;
+                            }
+
+                            .fee-modal-title {
+                                margin: 6px 0 0;
+                                color: #10233f;
+                                font-size: 26px;
+                            }
+
+                            .fee-modal-subtitle {
+                                margin-top: 6px;
+                                color: #7a8798;
+                                font-size: 13px;
+                            }
+
+                            .fee-modal-close {
+                                width: 40px;
+                                height: 40px;
+                                border:
+                                    1px solid #e5eaf0;
+                                border-radius: 12px;
+                                background: #fff;
+                                cursor: pointer;
+                                font-size: 21px;
+                            }
+
+                            .fee-summary-grid {
+                                display: grid;
+                                grid-template-columns:
+                                    repeat(4,minmax(0,1fr));
+                                gap: 14px;
+                            }
+
+                            .fee-summary-card {
+                                background: #f8fafc;
+                                border:
+                                    1px solid #e8edf3;
+                                border-radius: 16px;
+                                padding: 18px;
+                            }
+
+                            .fee-summary-label {
+                                color: #7c8798;
+                                font-size: 10px;
+                                font-weight: 800;
+                                letter-spacing: .7px;
+                                text-transform: uppercase;
+                            }
+
+                            .fee-summary-value {
+                                margin-top: 8px;
+                                color: #10233f;
+                                font-size: 23px;
+                                font-weight: 800;
+                            }
+
+                            .fee-panel {
+                                margin-top: 22px;
+                                border:
+                                    1px solid #e8edf3;
+                                border-radius: 18px;
+                                overflow: hidden;
+                            }
+
+                            .fee-panel-header {
+                                display: flex;
+                                align-items: center;
+                                justify-content:
+                                    space-between;
+                                padding: 18px 20px;
+                                border-bottom:
+                                    1px solid #edf1f5;
+                            }
+
+                            .fee-panel-header h3 {
+                                margin: 0;
+                                color: #172b49;
+                                font-size: 16px;
+                            }
+
+                            .fee-panel-header span {
+                                color: #8b95a5;
+                                font-size: 12px;
+                            }
+
+                            .fee-table-wrap {
+                                width: 100%;
+                                overflow-x: auto;
+                            }
+
+                            .fee-table {
+                                width: 100%;
+                                min-width: 850px;
+                                border-collapse:
+                                    collapse;
+                            }
+
+                            .fee-table th,
+                            .fee-table td {
+                                padding: 13px 15px;
+                                border-bottom:
+                                    1px solid #f0f3f6;
+                                text-align: right;
+                                white-space:
+                                    nowrap;
+                            }
+
+                            .fee-table th:first-child,
+                            .fee-table td:first-child {
+                                text-align: left;
+                            }
+
+                            .fee-table th {
+                                background: #fbfcfe;
+                                color: #7d8898;
+                                font-size: 10px;
+                                font-weight: 800;
+                                text-transform:
+                                    uppercase;
+                            }
+
+                            .fee-table td {
+                                color: #3b4758;
+                                font-size: 13px;
+                            }
+
+                            .fee-table td strong {
+                                color: #12243e;
+                            }
+
+                            .fee-type-grid {
+                                display: grid;
+                                grid-template-columns:
+                                    repeat(3,minmax(0,1fr));
+                                gap: 14px;
+                                padding: 18px;
+                            }
+
+                            .fee-type-card {
+                                padding: 16px;
+                                border:
+                                    1px solid #e8edf3;
+                                border-radius: 14px;
+                                background: #fcfdff;
+                            }
+
+                            .fee-type-name {
+                                color: #6f7a8a;
+                                font-size: 11px;
+                                font-weight: 800;
+                            }
+
+                            .fee-type-value {
+                                margin-top: 7px;
+                                color: #10233f;
+                                font-size: 21px;
+                                font-weight: 800;
+                            }
+
+                            .fee-type-count {
+                                margin-top: 4px;
+                                color: #8b95a5;
+                                font-size: 12px;
+                            }
+
+                            .fee-card-clickable {
+                                cursor: pointer;
+                            }
+
+                            .fee-card-clickable:focus {
+                                outline:
+                                    3px solid
+                                    rgba(200,16,46,.16);
+                                outline-offset: 2px;
+                            }
+
+                            @media (max-width: 900px) {
+
+                                .fee-summary-grid {
+                                    grid-template-columns:
+                                        repeat(2,minmax(0,1fr));
+                                }
+
+                                .fee-type-grid {
+                                    grid-template-columns: 1fr;
+                                }
+
+                            }
+
+                            @media (max-width: 560px) {
+
+                                .fee-collection-overlay {
+                                    padding: 10px;
+                                }
+
+                                .fee-collection-modal {
+                                    padding: 18px;
+                                    border-radius: 18px;
+                                }
+
+                                .fee-summary-grid {
+                                    grid-template-columns: 1fr;
+                                }
+
+                            }
+
+                        `}</style>
+
+                        <div className="fee-modal-header">
+
+                            <div>
+
+                                <div className="fee-modal-eyebrow">
+                                    Academy Finance
+                                </div>
+
+                                <h2 className="fee-modal-title">
+                                    Fee Collection Overview
+                                </h2>
+
+                                <div className="fee-modal-subtitle">
+                                    Super Admin • All active branches
+                                </div>
+
+                            </div>
+
+                            <button
+                                className="fee-modal-close"
+                                onClick={() =>
+                                    setShowFeeCollection(false)
+                                }
+                            >
+                                ×
+                            </button>
+
+                        </div>
+
+                        <div className="fee-summary-grid">
+
+                            <div className="fee-summary-card">
+                                <div className="fee-summary-label">
+                                    Today
+                                </div>
+
+                                <div className="fee-summary-value">
+                                    ₹{
+                                        Number(
+                                            feeSummary.today || 0
+                                        ).toLocaleString("en-IN")
+                                    }
+                                </div>
+                            </div>
+
+                            <div className="fee-summary-card">
+                                <div className="fee-summary-label">
+                                    Yesterday
+                                </div>
+
+                                <div className="fee-summary-value">
+                                    ₹{
+                                        Number(
+                                            feeSummary.yesterday || 0
+                                        ).toLocaleString("en-IN")
+                                    }
+                                </div>
+                            </div>
+
+                            <div className="fee-summary-card">
+                                <div className="fee-summary-label">
+                                    Last 7 Days
+                                </div>
+
+                                <div className="fee-summary-value">
+                                    ₹{
+                                        Number(
+                                            feeSummary.last_7_days || 0
+                                        ).toLocaleString("en-IN")
+                                    }
+                                </div>
+                            </div>
+
+                            <div className="fee-summary-card">
+                                <div className="fee-summary-label">
+                                    Last 30 Days
+                                </div>
+
+                                <div className="fee-summary-value">
+                                    ₹{
+                                        Number(
+                                            feeSummary.last_30_days || 0
+                                        ).toLocaleString("en-IN")
+                                    }
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div
+                            className="fee-summary-grid"
+                            style={{
+                                marginTop: "14px"
+                            }}
+                        >
+
+                            <div className="fee-summary-card">
+
+                                <div className="fee-summary-label">
+                                    This Month
+                                </div>
+
+                                <div className="fee-summary-value">
+                                    ₹{
+                                        Number(
+                                            feeSummary.this_month || 0
+                                        ).toLocaleString("en-IN")
+                                    }
+                                </div>
+
+                            </div>
+
+                            <div className="fee-summary-card">
+
+                                <div className="fee-summary-label">
+                                    Total Collected
+                                </div>
+
+                                <div className="fee-summary-value">
+                                    ₹{
+                                        Number(
+                                            feeSummary.total_collected || 0
+                                        ).toLocaleString("en-IN")
+                                    }
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                        <div className="fee-panel">
+
+                            <div className="fee-panel-header">
+
+                                <h3>
+                                    Branch-wise Collection
+                                </h3>
+
+                                <span>
+                                    Completed payments
+                                </span>
+
+                            </div>
+
+                            <div className="fee-table-wrap">
+
+                                <table className="fee-table">
+
+                                    <thead>
+
+                                        <tr>
+                                            <th>Branch</th>
+                                            <th>Today</th>
+                                            <th>Yesterday</th>
+                                            <th>Last 7 Days</th>
+                                            <th>Last 30 Days</th>
+                                            <th>This Month</th>
+                                            <th>Total</th>
+                                        </tr>
+
+                                    </thead>
+
+                                    <tbody>
+
+                                        {feeBranches.length === 0 ? (
+
+                                            <tr>
+                                                <td colSpan="7">
+                                                    No collection data available.
+                                                </td>
+                                            </tr>
+
+                                        ) : (
+
+                                            feeBranches.map(
+                                                branch => (
+
+                                                    <tr
+                                                        key={
+                                                            branch.branch_id
+                                                        }
+                                                    >
+
+                                                        <td>
+
+                                                            <strong>
+                                                                {
+                                                                    branch.branch_name
+                                                                }
+                                                            </strong>
+
+                                                            <br />
+
+                                                            <small>
+                                                                {
+                                                                    branch.branch_code
+                                                                }
+                                                            </small>
+
+                                                        </td>
+
+                                                        <td>
+                                                            ₹{
+                                                                Number(
+                                                                    branch.today || 0
+                                                                ).toLocaleString("en-IN")
+                                                            }
+                                                        </td>
+
+                                                        <td>
+                                                            ₹{
+                                                                Number(
+                                                                    branch.yesterday || 0
+                                                                ).toLocaleString("en-IN")
+                                                            }
+                                                        </td>
+
+                                                        <td>
+                                                            ₹{
+                                                                Number(
+                                                                    branch.last_7_days || 0
+                                                                ).toLocaleString("en-IN")
+                                                            }
+                                                        </td>
+
+                                                        <td>
+                                                            ₹{
+                                                                Number(
+                                                                    branch.last_30_days || 0
+                                                                ).toLocaleString("en-IN")
+                                                            }
+                                                        </td>
+
+                                                        <td>
+                                                            ₹{
+                                                                Number(
+                                                                    branch.this_month || 0
+                                                                ).toLocaleString("en-IN")
+                                                            }
+                                                        </td>
+
+                                                        <td>
+
+                                                            <strong>
+                                                                ₹{
+                                                                    Number(
+                                                                        branch.total_collected || 0
+                                                                    ).toLocaleString("en-IN")
+                                                                }
+                                                            </strong>
+
+                                                        </td>
+
+                                                    </tr>
+
+                                                )
+                                            )
+
+                                        )}
+
+                                    </tbody>
+
+                                </table>
+
+                            </div>
+
+                        </div>
+
+                        <div className="fee-panel">
+
+                            <div className="fee-panel-header">
+
+                                <h3>
+                                    Fee Type Collection
+                                </h3>
+
+                                <span>
+                                    Completed payments
+                                </span>
+
+                            </div>
+
+                            <div className="fee-type-grid">
+
+                                {feeTypes.length === 0 ? (
+
+                                    <div className="fee-type-card">
+                                        No collection data available.
+                                    </div>
+
+                                ) : (
+
+                                    feeTypes.map(
+                                        type => (
+
+                                            <div
+                                                className="fee-type-card"
+                                                key={
+                                                    type.fee_type
+                                                }
+                                            >
+
+                                                <div className="fee-type-name">
+                                                    {
+                                                        type.fee_type
+                                                    }
+                                                </div>
+
+                                                <div className="fee-type-value">
+                                                    ₹{
+                                                        Number(
+                                                            type.total_collected || 0
+                                                        ).toLocaleString("en-IN")
+                                                    }
+                                                </div>
+
+                                                <div className="fee-type-count">
+                                                    {
+                                                        type.payment_count
+                                                    }{" "}
+                                                    payments
+                                                </div>
+
+                                            </div>
+
+                                        )
+                                    )
+
+                                )}
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+            )}
+
 
             </div>
         </div>

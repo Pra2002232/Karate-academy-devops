@@ -19,7 +19,23 @@ function Competitions() {
     });
 
     const [students, setStudents] = useState([]);
-    const [selectedCompetition, setSelectedCompetition] = useState(null);
+const currentUser = (() => {
+        try {
+            return JSON.parse(
+                localStorage.getItem("admin_user") || "{}"
+            );
+        } catch {
+            return {};
+        }
+    })();
+
+    const isSuperAdmin =
+        currentUser.role === "SUPER_ADMIN";
+
+    const isBranchAdmin =
+        currentUser.role === "BRANCH_ADMIN";
+
+const [selectedCompetition, setSelectedCompetition] = useState(null);
 
     const [showCompetitionModal, setShowCompetitionModal] = useState(false);
     const [showRegistrationModal, setShowRegistrationModal] = useState(false);
@@ -49,8 +65,10 @@ function Competitions() {
         try {
             setLoading(true);
 
-            const [competitionRes, dashboardRes, studentsRes] =
-                await Promise.all([
+            const [
+                competitionRes,
+                dashboardRes,
+                studentsRes ] = await Promise.all([
                     api.get("/competitions"),
                     api.get("/competitions/dashboard"),
                     api.get("/students")
@@ -66,7 +84,38 @@ function Competitions() {
             );
 
             setStudents(studentsRes.data.students || []);
-        } catch (err) {
+
+            const competitionQueryId =
+                new URLSearchParams(
+                    window.location.search
+                ).get("id");
+
+            if (competitionQueryId) {
+
+                const targetCompetition =
+                    (
+                        competitionRes.data.competitions ||
+                        []
+                    ).find(
+                        item =>
+                            String(item.id) ===
+                            String(competitionQueryId)
+                    );
+
+                if (targetCompetition) {
+
+                    setTimeout(
+                        () =>
+                            openDetails(
+                                targetCompetition
+                            ),
+                        0
+                    );
+
+                }
+
+            }
+} catch (err) {
             console.error(err);
             setError("Unable to load competition data.");
         } finally {
@@ -106,7 +155,9 @@ function Competitions() {
                 : "",
             location: competition.location || "",
             organizer: competition.organizer || "",
-            description: competition.description || ""
+            description:
+                competition.description || "",
+
         });
 
         setError("");
@@ -117,8 +168,13 @@ function Competitions() {
     const saveCompetition = async (e) => {
         e.preventDefault();
 
-        if (!form.competition_name || !form.competition_date) {
-            setError("Competition name and date are required.");
+        if (
+            !form.competition_name ||
+            !form.competition_date
+        ) {
+            setError(
+                "Competition name and date are required."
+            );
             return;
         }
 
@@ -240,7 +296,50 @@ function Competitions() {
         }
     };
 
-    const formatDate = (date) => {
+    
+const markCompetitionFeeCompleted = async (participant) => {
+    const competitionId = selectedCompetition?.competition?.id;
+
+    if (!competitionId || !participant?.id) {
+        setError("Unable to identify the competition registration.");
+        return;
+    }
+
+    const confirmed = window.confirm(
+        `Confirm that the competition fee for ${participant.name} has been received?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+        setSaving(true);
+        setError("");
+        setMessage("");
+
+        await api.put(
+            `/competitions/registration/${participant.id}/fee`,
+            {}
+        );
+
+        const response = await api.get(`/competitions/${competitionId}`);
+        setSelectedCompetition(response.data);
+        setMessage(
+            `${participant.name}'s competition fee is marked Fee Completed.`
+        );
+
+        await loadData();
+    } catch (error) {
+        console.error("Competition fee update error:", error);
+        setError(
+            error.response?.data?.message ||
+            "Unable to mark the competition fee completed."
+        );
+    } finally {
+        setSaving(false);
+    }
+};
+
+const formatDate = (date) => {
         if (!date) return "-";
 
         return new Date(date).toLocaleDateString("en-IN", {
@@ -371,9 +470,12 @@ function Competitions() {
 
                         {competitions.map((competition) => (
                             <div
-                                className="competition-card"
-                                key={competition.id}
-                            >
+                                    className="competition-card competition-card-clickable"
+                                    key={competition.id}
+                                    onClick={() =>
+                                        openDetails(competition)
+                                    }
+                                >
 
                                 <div className="competition-card-top">
 
@@ -404,6 +506,13 @@ function Competitions() {
                                 <h3>
                                     {competition.competition_name}
                                 </h3>
+
+                                    {competition.branch_name && (
+                                        <div className="competition-branch">
+                                            📍 {competition.branch_name}
+                                        </div>
+                                    )}
+
 
                                 <div className="competition-info">
 
@@ -440,7 +549,12 @@ function Competitions() {
                                     </p>
                                 )}
 
-                                <div className="competition-actions">
+                                <div
+                                    className="competition-actions"
+                                    onClick={event =>
+                                        event.stopPropagation()
+                                    }
+                                >
 
                                     <button
                                         className="action-btn view"
@@ -595,7 +709,7 @@ function Competitions() {
                                 />
                             </div>
 
-                            <div className="form-group full">
+<div className="form-group full">
                                 <label>Description</label>
 
                                 <textarea
@@ -947,6 +1061,7 @@ function Competitions() {
                                         No students registered yet.
                                     </div>
                                 ) : (
+                                    <>
                                     <table className="participant-table">
 
                                         <thead>
@@ -1028,6 +1143,53 @@ function Competitions() {
                                         </tbody>
 
                                     </table>
+
+                        <section className="competition-fee-management">
+                            <div className="competition-fee-heading">
+                                <h3>Competition Fee Management</h3>
+                                <p>After receiving the payment, update the registration status below.</p>
+                            </div>
+
+                            {(selectedCompetition?.participants || []).length === 0 ? (
+                                <p className="competition-fee-empty">
+                                    No student registrations yet.
+                                </p>
+                            ) : (
+                                <div className="competition-fee-list">
+                                    {selectedCompetition.participants.map((participant) => (
+                                        <div className="competition-fee-row" key={participant.id}>
+                                            <div className="competition-fee-student">
+                                                <strong>{participant.name}</strong>
+                                                <span>
+                                                    {[participant.category, participant.event]
+                                                        .filter(Boolean)
+                                                        .join(" · ") || "Category/event not specified"}
+                                                </span>
+                                            </div>
+
+                                            {participant.fee_status === "PAID" ? (
+                                                <span className="competition-fee-completed">
+                                                    ✓ Fee Completed
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    className="competition-fee-button"
+                                                    disabled={saving}
+                                                    onClick={() =>
+                                                        markCompetitionFeeCompleted(participant)
+                                                    }
+                                                >
+                                                    {saving ? "Updating..." : "Mark Fee Completed"}
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+
+                                    </>
                                 )}
 
                             </div>
