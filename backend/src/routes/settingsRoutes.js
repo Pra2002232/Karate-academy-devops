@@ -1,5 +1,9 @@
 const express = require("express");
+const { authenticateToken, authorizeRoles } = require("../middleware/authMiddleware");
 const router = express.Router();
+
+// Settings are available only to Super Admin.
+router.use(authenticateToken, authorizeRoles("SUPER_ADMIN"));
 const pool = require("../config/db");
 
 // =====================================================

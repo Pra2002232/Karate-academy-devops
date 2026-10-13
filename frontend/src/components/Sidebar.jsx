@@ -232,6 +232,7 @@ function Sidebar() {
 
                 )}
 
+                {sidebarUserRole === "SUPER_ADMIN" && (
                 <NavLink
                     to="/settings"
                     className={({ isActive }) =>
@@ -245,6 +246,7 @@ function Sidebar() {
                         Settings
                     </span>
                 </NavLink>
+                )}
 
                 <div className="admin-card">
                     <div className="admin-avatar">
