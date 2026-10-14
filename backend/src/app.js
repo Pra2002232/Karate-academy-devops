@@ -23,7 +23,13 @@ const app = express();
 
 app.use(cors());
 
-app.use(express.json());
+app.use(express.json({
+    verify: (req, res, buf) => {
+        if (req.originalUrl.split("?")[0] === "/api/whatsapp/webhook") {
+            req.rawBody = Buffer.from(buf);
+        }
+    }
+}));
 
 
 // ========================================
