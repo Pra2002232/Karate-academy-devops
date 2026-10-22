@@ -18,6 +18,7 @@ import RoleHome from "./pages/RoleHome";
 import BranchDashboard from "./pages/BranchDashboard";
 import ParentDashboard from "./pages/ParentDashboard";
 import ParentLogin from "./pages/ParentLogin";
+import Messages from "./pages/Messages";
 
 
 function ModulePage({ title, subtitle, icon }) {
@@ -156,6 +157,10 @@ function AcademyLayout() {
   			  path="/settings"
    			 element={<Settings />}
 			/>
+
+                
+                <Route path="/messages" element={<Messages />} />
+
 
                 
                 <Route
