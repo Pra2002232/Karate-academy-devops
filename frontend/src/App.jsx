@@ -19,6 +19,7 @@ import BranchDashboard from "./pages/BranchDashboard";
 import ParentDashboard from "./pages/ParentDashboard";
 import ParentLogin from "./pages/ParentLogin";
 import Messages from "./pages/Messages";
+import EmailMessages from "./pages/EmailMessages";
 
 
 function ModulePage({ title, subtitle, icon }) {
@@ -160,6 +161,7 @@ function AcademyLayout() {
 
                 
                 <Route path="/messages" element={<Messages />} />
+                <Route path="/email-messages" element={<EmailMessages />} />
 
 
                 

@@ -69,6 +69,14 @@ const publicRoutes = require("./routes/publicRoutes");
 const whatsappRoutes =
     require("./routes/whatsappRoutes");
 
+const emailRoutes =
+    require("./routes/emailRoutes");
+
+app.use(
+    "/api/email",
+    emailRoutes
+);
+
 app.use(
     "/api/whatsapp",
     whatsappRoutes
