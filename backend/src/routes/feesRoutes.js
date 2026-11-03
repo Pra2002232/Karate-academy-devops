@@ -5,6 +5,9 @@ const {
     authenticateToken
 } = require("../middleware/authMiddleware");
 
+const { sendWhatsAppTemplateMessage } =
+    require("../services/whatsappService");
+
 const router = express.Router();
 
 /*
@@ -25,6 +28,121 @@ const ALLOWED_STATUS = [
     "PENDING",
     "COMPLETED"
 ];
+
+const FEE_TEMPLATE_NAME = "karate_fee_reminder";
+
+function formatWhatsAppDate(value) {
+    if (!value) return "Not specified";
+
+    const raw = value instanceof Date
+        ? value.toISOString().slice(0, 10)
+        : String(value).slice(0, 10);
+
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+    return match
+        ? `${match[3]}/${match[2]}/${match[1]}`
+        : raw;
+}
+
+function getFeeTypeLabel(value) {
+    const labels = {
+        MONTHLY: "Monthly Fees",
+        COSTUME: "Costume Fees",
+        COMPETITION: "Competition Fees"
+    };
+
+    return labels[String(value || "").toUpperCase()] || String(value || "Fees");
+}
+
+async function sendPendingFeeReminder({ fee, student, req, triggerEvent }) {
+    const phone = student.parent_mobile || null;
+    let status = "SKIPPED_CONSENT";
+    let messageId = null;
+    let errorMessage = "Parent WhatsApp consent is not recorded.";
+
+    const allowedRole = ["SUPER_ADMIN", "BRANCH_ADMIN"].includes(
+        String(req.user?.role || "").toUpperCase()
+    );
+
+    if (!allowedRole) {
+        status = "SKIPPED_ROLE";
+        errorMessage = "Only Super Admin and Branch Admin can trigger fee reminders.";
+    } else if (student.whatsapp_opt_in !== true) {
+        status = "SKIPPED_CONSENT";
+        errorMessage = "whatsapp_opt_in is false. Obtain and record parent consent first.";
+    } else if (!phone || !String(phone).trim()) {
+        status = "SKIPPED_NO_PHONE";
+        errorMessage = "Student has no parent mobile number.";
+    } else {
+        try {
+            const response = await sendWhatsAppTemplateMessage(
+                phone,
+                FEE_TEMPLATE_NAME,
+                [
+                    student.parent_name || "Parent",
+                    student.student_name || student.name || "Student",
+                    getFeeTypeLabel(fee.fee_type),
+                    String(fee.amount ?? "0"),
+                    formatWhatsAppDate(fee.due_date)
+                ],
+                "en_US"
+            );
+
+            messageId = response.messages?.[0]?.id || null;
+            status = "ACCEPTED";
+            errorMessage = null;
+        } catch (error) {
+            status = "FAILED";
+            errorMessage = error.response?.data
+                ? JSON.stringify(error.response.data)
+                : error.message;
+
+            console.error(
+                "Fee WhatsApp reminder failed:",
+                error.response?.data || error.message
+            );
+        }
+    }
+
+    try {
+        await pool.query(
+            `
+            INSERT INTO whatsapp_notification_logs (
+                fee_id,
+                student_id,
+                branch_id,
+                recipient_phone,
+                template_name,
+                message_id,
+                status,
+                trigger_event,
+                error_message,
+                created_by
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `,
+            [
+                fee.id,
+                fee.student_id,
+                student.branch_id || null,
+                phone,
+                FEE_TEMPLATE_NAME,
+                messageId,
+                status,
+                triggerEvent,
+                errorMessage,
+                req.user?.id || req.user?.user_id || null
+            ]
+        );
+    } catch (logError) {
+        // Notification logging must never undo a saved fee.
+        console.error("WhatsApp notification log insert failed:", logError.message);
+    }
+
+    return { status, messageId };
+}
+
 
 
 // ==================================================
@@ -292,7 +410,9 @@ router.post("/", async (req, res) => {
                 student_code,
                 name,
                 parent_name,
-                parent_mobile
+                parent_mobile,
+                branch_id,
+                whatsapp_opt_in
             FROM students
             WHERE id = $1
             `,
@@ -307,6 +427,22 @@ router.post("/", async (req, res) => {
 
         }
 
+
+        const student = studentResult.rows[0];
+
+        if (req.user.role === "BRANCH_ADMIN") {
+            if (!req.user.branch_id) {
+                return res.status(403).json({
+                    message: "Branch Admin is not assigned to a branch."
+                });
+            }
+
+            if (Number(student.branch_id) !== Number(req.user.branch_id)) {
+                return res.status(403).json({
+                    message: "You cannot create fees for another branch."
+                });
+            }
+        }
 
         // ------------------------------
         // Status
@@ -386,7 +522,19 @@ router.post("/", async (req, res) => {
         );
 
 
+        let whatsappNotification = null;
+
+        if (feeStatus === "PENDING") {
+            whatsappNotification = await sendPendingFeeReminder({
+                fee: result.rows[0],
+                student,
+                req,
+                triggerEvent: "FEE_CREATED_PENDING"
+            });
+        }
+
         res.status(201).json({
+            whatsapp_notification: whatsappNotification,
 
             message: "Fee created successfully",
 
@@ -481,7 +629,18 @@ router.put("/:id", async (req, res) => {
 
 
         const existing = await pool.query(
-            `SELECT * FROM fees WHERE id = $1`,
+            `
+            SELECT
+                f.*,
+                s.name AS student_name,
+                s.parent_name,
+                s.parent_mobile,
+                s.branch_id,
+                s.whatsapp_opt_in
+            FROM fees f
+            JOIN students s ON s.id = f.student_id
+            WHERE f.id = $1
+            `,
             [id]
         );
 
@@ -497,8 +656,26 @@ router.put("/:id", async (req, res) => {
 
         const current = existing.rows[0];
 
+        if (req.user.role === "BRANCH_ADMIN") {
+            if (!req.user.branch_id) {
+                return res.status(403).json({
+                    message: "Branch Admin is not assigned to a branch."
+                });
+            }
+
+            if (Number(current.branch_id) !== Number(req.user.branch_id)) {
+                return res.status(403).json({
+                    message: "You cannot update fees for another branch."
+                });
+            }
+        }
+
         const newStatus =
             status || current.status;
+
+        const statusChangedToPending =
+            String(current.status || "").toUpperCase() !== "PENDING" &&
+            String(newStatus || "").toUpperCase() === "PENDING";
 
         const newPaidDate =
             newStatus === "COMPLETED"
@@ -552,7 +729,19 @@ router.put("/:id", async (req, res) => {
         );
 
 
+        let whatsappNotification = null;
+
+        if (statusChangedToPending) {
+            whatsappNotification = await sendPendingFeeReminder({
+                fee: result.rows[0],
+                student: current,
+                req,
+                triggerEvent: "FEE_STATUS_CHANGED_PENDING"
+            });
+        }
+
         res.json({
+            whatsapp_notification: whatsappNotification,
 
             message: "Fee updated successfully",
 
