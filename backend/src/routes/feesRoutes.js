@@ -1198,4 +1198,197 @@ router.get("/dashboard", async (req, res) => {
 });
 
 
+
+// ======================================================
+// MANUAL WHATSAPP FEE REMINDER RETRY
+// One manual retry per fee, with branch and duplicate checks
+// ======================================================
+
+router.post("/:id/whatsapp-retry", async (req, res) => {
+    const feeId = Number(req.params.id);
+    const role = String(req.user?.role || "").toUpperCase();
+
+    if (!Number.isSafeInteger(feeId) || feeId < 1) {
+        return res.status(400).json({
+            message: "Invalid fee ID"
+        });
+    }
+
+    if (!["SUPER_ADMIN", "BRANCH_ADMIN"].includes(role)) {
+        return res.status(403).json({
+            message: "Only Super Admin and Branch Admin can retry fee reminders"
+        });
+    }
+
+    if (role === "BRANCH_ADMIN" && !req.user?.branch_id) {
+        return res.status(403).json({
+            message: "Your account is not assigned to a branch"
+        });
+    }
+
+    let client;
+    let transactionStarted = false;
+
+    try {
+        client = await pool.connect();
+
+        await client.query("BEGIN");
+        transactionStarted = true;
+
+        // Serialize retry requests for the same fee.
+        await client.query(
+            "SELECT pg_advisory_xact_lock(hashtext($1))",
+            [`karate-whatsapp-fee-retry-${feeId}`]
+        );
+
+        // Row-level security also restricts this query by the
+        // authenticated user's role and branch context.
+        const feeResult = await client.query(
+            `
+            SELECT
+                f.id,
+                f.student_id,
+                f.status,
+                f.fee_type,
+                f.amount,
+                f.due_date,
+                s.name AS student_name,
+                s.parent_name,
+                s.parent_mobile,
+                s.branch_id,
+                s.whatsapp_opt_in
+            FROM fees f
+            INNER JOIN students s
+                ON s.id = f.student_id
+            WHERE f.id = $1
+            LIMIT 1
+            `,
+            [feeId]
+        );
+
+        if (feeResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            transactionStarted = false;
+
+            return res.status(404).json({
+                message: "Fee not found or you do not have access to it"
+            });
+        }
+
+        const fee = feeResult.rows[0];
+
+        if (
+            role === "BRANCH_ADMIN" &&
+            String(fee.branch_id) !== String(req.user.branch_id)
+        ) {
+            await client.query("ROLLBACK");
+            transactionStarted = false;
+
+            return res.status(403).json({
+                message: "You cannot access fees outside your branch"
+            });
+        }
+
+        if (String(fee.status).toUpperCase() !== "PENDING") {
+            await client.query("ROLLBACK");
+            transactionStarted = false;
+
+            return res.status(409).json({
+                message: "Only PENDING fees can receive a fee reminder"
+            });
+        }
+
+        if (fee.whatsapp_opt_in !== true) {
+            await client.query("ROLLBACK");
+            transactionStarted = false;
+
+            return res.status(409).json({
+                message: "Parent WhatsApp consent is not recorded"
+            });
+        }
+
+        if (!fee.parent_mobile || !String(fee.parent_mobile).trim()) {
+            await client.query("ROLLBACK");
+            transactionStarted = false;
+
+            return res.status(409).json({
+                message: "Parent mobile number is not available"
+            });
+        }
+
+        // Do not send again if Meta previously accepted a message,
+        // or if this one-time manual retry has already been attempted.
+        const previousAttempt = await client.query(
+            `
+            SELECT id, status, trigger_event
+            FROM whatsapp_notification_logs
+            WHERE fee_id = $1
+              AND (
+                    status = 'ACCEPTED'
+                    OR trigger_event = 'FEE_MANUAL_RETRY'
+              )
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            `,
+            [feeId]
+        );
+
+        if (previousAttempt.rows.length > 0) {
+            await client.query("ROLLBACK");
+            transactionStarted = false;
+
+            return res.status(409).json({
+                message: "This fee already has an accepted notification or a manual retry attempt. No message was sent.",
+                previous_attempt: previousAttempt.rows[0]
+            });
+        }
+
+        // Uses the existing helper, approved template, and log table.
+        const notification = await sendPendingFeeReminder({
+            fee,
+            student: fee,
+            req,
+            triggerEvent: "FEE_MANUAL_RETRY"
+        });
+
+        await client.query("COMMIT");
+        transactionStarted = false;
+
+        return res.status(
+            notification.status === "ACCEPTED" ? 200 : 502
+        ).json({
+            message: notification.status === "ACCEPTED"
+                ? "Meta accepted the fee reminder message"
+                : "WhatsApp retry did not succeed. Check notification logs.",
+            fee_id: feeId,
+            notification_status: notification.status,
+            message_id: notification.messageId
+        });
+
+    } catch (error) {
+        if (client && transactionStarted) {
+            try {
+                await client.query("ROLLBACK");
+            } catch (rollbackError) {
+                console.error(
+                    "WhatsApp retry rollback error:",
+                    rollbackError.message
+                );
+            }
+        }
+
+        console.error("Manual fee WhatsApp retry error:", error);
+
+        return res.status(500).json({
+            message: "Unable to retry the WhatsApp fee reminder"
+        });
+
+    } finally {
+        if (client) {
+            client.release();
+        }
+    }
+});
+
+
 module.exports = router;
