@@ -30,6 +30,7 @@ const ALLOWED_STATUS = [
 ];
 
 const FEE_TEMPLATE_NAME = "karate_fee_reminder";
+const PAYMENT_CONFIRMATION_TEMPLATE_NAME = "karate_payment_confirmation";
 
 function formatWhatsAppDate(value) {
     if (!value) return "Not specified";
@@ -332,6 +333,148 @@ router.get("/student/:studentId", async (req, res) => {
 });
 
 
+
+
+// ======================================================
+// WHATSAPP PAYMENT CONFIRMATION
+// ======================================================
+
+function formatPaymentConfirmationDate(value) {
+    if (!value) return "Not provided";
+
+    const date = value instanceof Date
+        ? value
+        : new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return String(value);
+    }
+
+    return new Intl.DateTimeFormat("en-GB", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        timeZone: "Asia/Kolkata"
+    }).format(date);
+}
+
+async function sendPaymentConfirmation({ fee, student, req }) {
+    const phone = student.parent_mobile || null;
+    const role = String(req.user?.role || "").toUpperCase();
+
+    let status = "SKIPPED_CONSENT";
+    let messageId = null;
+    let errorMessage = "Parent WhatsApp consent is not recorded.";
+
+    if (!["SUPER_ADMIN", "BRANCH_ADMIN"].includes(role)) {
+        status = "SKIPPED_ROLE";
+        errorMessage = "Only Super Admin and Branch Admin can send payment confirmations.";
+
+    } else if (student.whatsapp_opt_in !== true) {
+        status = "SKIPPED_CONSENT";
+        errorMessage = "Parent WhatsApp consent is not recorded.";
+
+    } else if (!phone || !String(phone).trim()) {
+        status = "SKIPPED_NO_PHONE";
+        errorMessage = "Parent mobile number is not available.";
+
+    } else {
+        try {
+            // Prevent duplicate confirmations if this fee was
+            // previously confirmed by Meta.
+            const previousAccepted = await pool.query(
+                `
+                SELECT id, message_id
+                FROM whatsapp_notification_logs
+                WHERE fee_id = $1
+                  AND template_name = $2
+                  AND status = 'ACCEPTED'
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                `,
+                [fee.id, PAYMENT_CONFIRMATION_TEMPLATE_NAME]
+            );
+
+            if (previousAccepted.rows.length > 0) {
+                status = "SKIPPED_DUPLICATE";
+                messageId = previousAccepted.rows[0].message_id || null;
+                errorMessage = "A payment confirmation was already accepted for this fee.";
+
+            } else {
+                const response = await sendWhatsAppTemplateMessage(
+                    phone,
+                    PAYMENT_CONFIRMATION_TEMPLATE_NAME,
+                    [
+                        student.parent_name || "Parent",
+                        student.student_name || student.name || "Student",
+                        getFeeTypeLabel(fee.fee_type),
+                        String(fee.amount ?? "0"),
+                        formatPaymentConfirmationDate(fee.paid_date),
+                        fee.payment_reference || "Not provided"
+                    ],
+                    "en_US"
+                );
+
+                messageId = response.messages?.[0]?.id || null;
+                status = "ACCEPTED";
+                errorMessage = null;
+            }
+
+        } catch (error) {
+            status = "FAILED";
+            errorMessage = error.response?.data
+                ? JSON.stringify(error.response.data)
+                : error.message;
+
+            console.error(
+                "Payment confirmation WhatsApp failed:",
+                error.response?.data || error.message
+            );
+        }
+    }
+
+    try {
+        await pool.query(
+            `
+            INSERT INTO whatsapp_notification_logs (
+                fee_id,
+                student_id,
+                branch_id,
+                recipient_phone,
+                template_name,
+                message_id,
+                status,
+                trigger_event,
+                error_message,
+                created_by
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `,
+            [
+                fee.id,
+                fee.student_id,
+                student.branch_id || null,
+                phone,
+                PAYMENT_CONFIRMATION_TEMPLATE_NAME,
+                messageId,
+                status,
+                "FEE_STATUS_CHANGED_COMPLETED",
+                errorMessage,
+                req.user?.id || req.user?.user_id || null
+            ]
+        );
+
+    } catch (logError) {
+        console.error(
+            "Payment confirmation log insert failed:",
+            logError.message
+        );
+    }
+
+    return { status, messageId };
+}
+
+
 router.post("/", async (req, res) => {
 
     try {
@@ -531,25 +674,31 @@ router.post("/", async (req, res) => {
                 req,
                 triggerEvent: "FEE_CREATED_PENDING"
             });
+            let whatsappNotification = null;
+        let paymentConfirmationNotification = null;
+
+        if (statusChangedToPending) {
+            whatsappNotification = await sendPendingFeeReminder({
+                fee: result.rows[0],
+                student: current,
+                req,
+                triggerEvent: "FEE_STATUS_CHANGED_PENDING"
+            });
         }
 
-        res.status(201).json({
-            whatsapp_notification: whatsappNotification,
+        const statusChangedToCompleted =
+            String(current.status || "").toUpperCase() === "PENDING" &&
+            String(newStatus || "").toUpperCase() === "COMPLETED";
 
-            message: "Fee created successfully",
+        if (statusChangedToCompleted) {
+            paymentConfirmationNotification = await sendPaymentConfirmation({
+                fee: result.rows[0],
+                student: current,
+                req
+            });
+        }
 
-            student: studentResult.rows[0],
-
-            fee: result.rows[0]
-
-        });
-
-    } catch (error) {
-
-        console.error("Create Fee Error:", error);
-
-
-        // Monthly duplicate
+Monthly duplicate
         if (error.code === "23505") {
 
             return res.status(409).json({
@@ -742,6 +891,7 @@ router.put("/:id", async (req, res) => {
 
         res.json({
             whatsapp_notification: whatsappNotification,
+            payment_confirmation_notification: paymentConfirmationNotification,
 
             message: "Fee updated successfully",
 

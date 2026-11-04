@@ -224,7 +224,7 @@ router.post("/", async (req, res) => {
                 s.name,
                 s.parent_name,
                 s.parent_mobile,
-                s.joining_date,
+                TO_CHAR(s.joining_date, 'YYYY-MM-DD') AS joining_date,
                 s.batch,
                 s.branch_id,
                 s.whatsapp_opt_in,
@@ -250,7 +250,7 @@ router.post("/", async (req, res) => {
         student = studentResult.rows[0];
 
         const joiningDate = student.joining_date
-            ? String(student.joining_date).slice(0, 10)
+            ? String(student.joining_date).trim()
             : null;
 
         if (joiningDate && attendanceDate < joiningDate) {
