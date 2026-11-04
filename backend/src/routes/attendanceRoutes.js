@@ -1,6 +1,8 @@
 const express = require("express");
 const pool = require("../config/db");
 
+const { sendWhatsAppTemplateMessage } = require("../services/whatsappService");
+
 const {
     authenticateToken,
     authorizeRoles
@@ -10,198 +12,364 @@ const router = express.Router();
 
 router.use(authenticateToken);
 
+// ==================================================
+// WHATSAPP ATTENDANCE NOTIFICATIONS
+// ==================================================
+
+const ATTENDANCE_TEMPLATE_NAME = "karate_attendance_update";
+
+function formatAttendanceDate(value) {
+    const raw = value instanceof Date
+        ? value.toISOString().slice(0, 10)
+        : String(value || "").slice(0, 10);
+
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+    if (!match) return raw || "Not specified";
+
+    const [, year, month, day] = match;
+    const date = new Date(Date.UTC(
+        Number(year),
+        Number(month) - 1,
+        Number(day)
+    ));
+
+    return new Intl.DateTimeFormat("en-GB", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC"
+    }).format(date);
+}
+
+function getAttendanceStatusLabel(status) {
+    const labels = {
+        PRESENT: "Present",
+        ABSENT: "Absent",
+        LATE: "Late"
+    };
+
+    return labels[String(status || "").toUpperCase()] || String(status || "");
+}
+
+async function sendAttendanceWhatsAppNotification({
+    attendance,
+    student,
+    req,
+    triggerEvent
+}) {
+    const phone = student.parent_mobile || null;
+    const role = String(req.user?.role || "").toUpperCase();
+
+    let notificationStatus = "FAILED";
+    let messageId = null;
+    let errorMessage = null;
+
+    if (!["SUPER_ADMIN", "BRANCH_ADMIN"].includes(role)) {
+        notificationStatus = "SKIPPED_ROLE";
+        errorMessage = "Only Super Admin and Branch Admin can send attendance notifications.";
+    } else if (student.whatsapp_opt_in !== true) {
+        notificationStatus = "SKIPPED_CONSENT";
+        errorMessage = "Parent WhatsApp consent is not recorded.";
+    } else if (!phone || !String(phone).trim()) {
+        notificationStatus = "SKIPPED_NO_PHONE";
+        errorMessage = "Parent mobile number is not available.";
+    } else {
+        try {
+            const response = await sendWhatsAppTemplateMessage(
+                phone,
+                ATTENDANCE_TEMPLATE_NAME,
+                [
+                    student.parent_name || "Parent",
+                    student.name || "Student",
+                    getAttendanceStatusLabel(attendance.status),
+                    formatAttendanceDate(attendance.attendance_date),
+                    student.batch || "Not specified",
+                    student.branch_name || "Karate Academy"
+                ],
+                "en_US"
+            );
+
+            messageId = response.messages?.[0]?.id || null;
+            notificationStatus = "ACCEPTED";
+
+        } catch (error) {
+            notificationStatus = "FAILED";
+            errorMessage = error.response?.data
+                ? JSON.stringify(error.response.data)
+                : error.message;
+
+            console.error(
+                "Attendance WhatsApp notification failed:",
+                error.response?.data || error.message
+            );
+        }
+    }
+
+    let logSaved = false;
+
+    try {
+        await pool.query(
+            `
+            INSERT INTO attendance_whatsapp_notification_logs (
+                attendance_id,
+                student_id,
+                branch_id,
+                recipient_phone,
+                template_name,
+                message_id,
+                status,
+                trigger_event,
+                error_message,
+                created_by
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `,
+            [
+                attendance.id,
+                student.id,
+                student.branch_id || null,
+                phone,
+                ATTENDANCE_TEMPLATE_NAME,
+                messageId,
+                notificationStatus,
+                triggerEvent,
+                errorMessage,
+                req.user?.id || req.user?.user_id || null
+            ]
+        );
+
+        logSaved = true;
+
+    } catch (logError) {
+        console.error(
+            "Attendance WhatsApp log insert failed:",
+            logError.message
+        );
+    }
+
+    return {
+        status: notificationStatus,
+        messageId,
+        logSaved
+    };
+}
+
+
+
 
 // ==================================================
 // 1. MARK ATTENDANCE
 // ==================================================
 
 router.post("/", async (req, res) => {
+    const body = req.body || {};
+    const studentId = Number(body.student_id);
+    const attendanceDate = String(body.attendance_date || "").trim();
+    const status = String(body.status || "").trim().toUpperCase();
+
+    if (!Number.isSafeInteger(studentId) || studentId < 1) {
+        return res.status(400).json({
+            message: "A valid student_id is required"
+        });
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(attendanceDate)) {
+        return res.status(400).json({
+            message: "attendance_date must use YYYY-MM-DD format"
+        });
+    }
+
+    const parsedDate = new Date(`${attendanceDate}T00:00:00.000Z`);
+
+    if (
+        Number.isNaN(parsedDate.getTime()) ||
+        parsedDate.toISOString().slice(0, 10) !== attendanceDate
+    ) {
+        return res.status(400).json({
+            message: "Invalid attendance date"
+        });
+    }
+
+    const allowedStatus = ["PRESENT", "ABSENT", "LATE"];
+
+    if (!allowedStatus.includes(status)) {
+        return res.status(400).json({
+            message: "Invalid status. Use PRESENT, ABSENT or LATE"
+        });
+    }
+
+    let client = null;
+    let student = null;
+    let attendance = null;
+    let shouldNotify = false;
+    let triggerEvent = null;
 
     try {
+        client = await pool.connect();
 
-        const {
-            student_id,
-            attendance_date,
-            status,
-            marked_by
-        } = req.body;
+        await client.query("BEGIN");
 
-
-        // ------------------------------
-        // Validation
-        // ------------------------------
-
-        if (!student_id) {
-            return res.status(400).json({
-                message: "student_id is required"
-            });
-        }
-
-        if (!attendance_date) {
-            return res.status(400).json({
-                message: "attendance_date is required"
-            });
-        }
-
-        if (!status) {
-            return res.status(400).json({
-                message: "status is required"
-            });
-        }
-
-
-        // ------------------------------
-        // Validate attendance status
-        // ------------------------------
-
-        const allowedStatus = [
-            "PRESENT",
-            "ABSENT",
-            "LATE"
-        ];
-
-        if (!allowedStatus.includes(status)) {
-
-            return res.status(400).json({
-                message:
-                    "Invalid status. Use PRESENT, ABSENT or LATE"
-            });
-
-        }
-
-
-        // ------------------------------
-        // Check student
-        // ------------------------------
-
-        const studentResult = await pool.query(
-            `
-            SELECT
-                id,
-                student_code,
-                name,
-                parent_name,
-                parent_mobile
-            FROM students
-            WHERE id = $1
-            `,
-            [student_id]
+        // Serialize writes for this student's attendance on this date.
+        await client.query(
+            "SELECT pg_advisory_xact_lock(hashtext($1)::bigint)",
+            [`karate-attendance-${studentId}-${attendanceDate}`]
         );
 
-
-        // --------------------------------------------------
-        // Student must have joined on/before attendance date
-        // --------------------------------------------------
-
-        const joiningDate =
-            studentResult.rows[0]?.joining_date;
-
-        if (
-            joiningDate &&
-            String(attendance_date) <
-            String(joiningDate)
-        ) {
-            return res.status(400).json({
-                message:
-                    "Attendance cannot be marked before the student's joining date.",
-                joining_date:
-                    joiningDate,
-                attendance_date:
-                    attendance_date
-            });
-        }
+        const studentResult = await client.query(
+            `
+            SELECT
+                s.id,
+                s.student_code,
+                s.name,
+                s.parent_name,
+                s.parent_mobile,
+                s.joining_date,
+                s.batch,
+                s.branch_id,
+                s.whatsapp_opt_in,
+                b.branch_name
+            FROM students s
+            LEFT JOIN branches b
+                ON b.id = s.branch_id
+            WHERE s.id = $1
+            `,
+            [studentId]
+        );
 
         if (studentResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            client.release();
+            client = null;
 
             return res.status(404).json({
-                message: "Student not found"
+                message: "Student not found or not accessible to your branch"
             });
-
         }
 
+        student = studentResult.rows[0];
 
-        // ------------------------------
-        // Insert / Update attendance
-        // ------------------------------
-        //
-        // One attendance record is allowed per
-        // student per date.
-        //
-        // New record  -> INSERT
-        // Existing    -> UPDATE
-        // ------------------------------
+        const joiningDate = student.joining_date
+            ? String(student.joining_date).slice(0, 10)
+            : null;
 
-        const result = await pool.query(
+        if (joiningDate && attendanceDate < joiningDate) {
+            await client.query("ROLLBACK");
+            client.release();
+            client = null;
+
+            return res.status(400).json({
+                message: "Attendance cannot be marked before the student's joining date.",
+                joining_date: joiningDate,
+                attendance_date: attendanceDate
+            });
+        }
+
+        const existingResult = await client.query(
             `
-            INSERT INTO attendance
-            (
+            SELECT id, status
+            FROM attendance
+            WHERE student_id = $1
+              AND attendance_date = $2
+            FOR UPDATE
+            `,
+            [studentId, attendanceDate]
+        );
+
+        const existing = existingResult.rows[0] || null;
+
+        const result = await client.query(
+            `
+            INSERT INTO attendance (
                 student_id,
                 attendance_date,
                 status,
                 marked_by
             )
             VALUES ($1, $2, $3, $4)
-
             ON CONFLICT (student_id, attendance_date)
             DO UPDATE SET
                 status = EXCLUDED.status,
                 marked_by = EXCLUDED.marked_by
-
             RETURNING *
             `,
             [
-                student_id,
-                attendance_date,
+                studentId,
+                attendanceDate,
                 status,
                 req.user.id
             ]
         );
 
+        attendance = result.rows[0];
 
-        // ------------------------------
-        // Response
-        // ------------------------------
+        const isNewAttendance = !existing;
+        const isStatusChanged = existing &&
+            String(existing.status).toUpperCase() !== status;
 
-        res.status(201).json({
+        shouldNotify = Boolean(isNewAttendance || isStatusChanged);
 
-            message: "Attendance marked successfully",
-
-            student: studentResult.rows[0],
-
-            attendance: result.rows[0]
-
-        });
-
-    }
-
-    catch (error) {
-
-        console.error("Attendance Error:", error);
-
-
-        // Duplicate attendance
-        if (error.code === "23505") {
-
-            return res.status(409).json({
-
-                message:
-                    "Attendance already exists for this student on this date"
-
-            });
-
+        if (isNewAttendance) {
+            triggerEvent = "ATTENDANCE_CREATED";
+        } else if (isStatusChanged) {
+            triggerEvent = "ATTENDANCE_STATUS_CHANGED";
         }
 
+        await client.query("COMMIT");
+        client.release();
+        client = null;
 
-        res.status(500).json({
+    } catch (error) {
+        // Destroy a failed transaction connection. PostgreSQL rolls
+        // back the open transaction when that connection is closed.
+        if (client) {
+            client.release(error);
+            client = null;
+        }
 
-            message: "Internal server error",
+        console.error("Attendance save error:", error);
 
+        if (error.code === "23505") {
+            return res.status(409).json({
+                message: "Attendance already exists for this student on this date"
+            });
+        }
+
+        return res.status(500).json({
+            message: "Unable to save attendance",
             error: error.message
-
         });
-
     }
 
+    // Attendance is already committed. A WhatsApp failure must not
+    // undo the saved attendance.
+    let whatsappNotification = {
+        status: "SKIPPED_UNCHANGED",
+        messageId: null,
+        logSaved: false
+    };
+
+    if (shouldNotify) {
+        whatsappNotification = await sendAttendanceWhatsAppNotification({
+            attendance,
+            student,
+            req,
+            triggerEvent
+        });
+    }
+
+    return res.status(201).json({
+        message: "Attendance marked successfully",
+        student: {
+            id: student.id,
+            student_code: student.student_code,
+            name: student.name,
+            parent_name: student.parent_name,
+            parent_mobile: student.parent_mobile
+        },
+        attendance,
+        whatsapp_notification: whatsappNotification
+    });
 });
 
 
