@@ -9,6 +9,8 @@ const EMPTY_EXAM = {
     examination_date: new Date().toISOString().split("T")[0],
     examiner: "",
     exam_fee: "",
+    reporting_time: "09:00",
+    venue: "",
     notes: ""
 };
 
@@ -159,6 +161,8 @@ function BeltGrades() {
                 exam_fee: examForm.exam_fee
                     ? Number(examForm.exam_fee)
                     : null,
+                reporting_time: examForm.reporting_time,
+                venue: examForm.venue.trim(),
                 notes: examForm.notes
             });
 
@@ -1146,6 +1150,32 @@ function BeltGrades() {
                                         onChange={
                                             handleScheduleChange
                                         }
+                                    />
+                                </label>
+
+                                <label>
+                                    Reporting Time *
+
+                                    <input
+                                        type="time"
+                                        name="reporting_time"
+                                        value={examForm.reporting_time}
+                                        onChange={handleScheduleChange}
+                                        required
+                                    />
+                                </label>
+
+                                <label>
+                                    Venue *
+
+                                    <input
+                                        type="text"
+                                        name="venue"
+                                        placeholder="Main Branch"
+                                        value={examForm.venue}
+                                        onChange={handleScheduleChange}
+                                        maxLength={255}
+                                        required
                                     />
                                 </label>
 

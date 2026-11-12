@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../services/api";
 import "./Reports.css";
 
@@ -10,7 +10,24 @@ function Reports() {
     const [toDate, setToDate] = useState("");
 
     const [batch, setBatch] = useState("");
+    const [batches, setBatches] = useState([]);
     const [status, setStatus] = useState("");
+
+    useEffect(() => {
+        async function loadBatches() {
+            try {
+                const response = await api.get("/batches", {
+                    params: { include_inactive: true }
+                });
+                setBatches(response.data.batches || []);
+            } catch (error) {
+                console.error("Report batch loading error:", error);
+                setBatches([]);
+            }
+        }
+
+        loadBatches();
+    }, []);
 
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState([]);
@@ -388,14 +405,35 @@ function Reports() {
                             Batch
                         </label>
 
-                        <input
-                            type="text"
-                            placeholder="e.g. Morning"
+                        <select
                             value={batch}
                             onChange={e =>
                                 setBatch(e.target.value)
                             }
-                        />
+                        >
+                            <option value="">
+                                All Batches
+                            </option>
+
+                            {batches.map((item) => (
+                                <option
+                                    key={item.id}
+                                    value={item.batch_name}
+                                >
+                                    {item.batch_name}
+                                    {item.days?.length
+                                        ? ` — ${item.days.join(", ")}`
+                                        : ""}
+                                    {item.start_time && item.end_time
+                                        ? ` (${String(item.start_time).slice(0, 5)}–${String(item.end_time).slice(0, 5)})`
+                                        : ""}
+                                    {!item.is_active ? " (Inactive)" : ""}
+                                    {item.branch_name
+                                        ? ` — ${item.branch_name}`
+                                        : " — All Branches"}
+                                </option>
+                            ))}
+                        </select>
 
                     </div>
 

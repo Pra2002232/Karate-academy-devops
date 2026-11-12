@@ -60,6 +60,8 @@ const reportingRoutes =
 const settingsRoutes =
     require("./routes/settingsRoutes");
 
+const batchRoutes = require("./routes/batchRoutes");
+
 const userRoutes = require("./routes/userRoutes");
 
 const branchRoutes =
@@ -109,6 +111,8 @@ app.use(
     "/api/settings",
     settingsRoutes
 );
+
+app.use("/api/batches", batchRoutes);
 
 app.use("/api/reports", reportRoutes);
 

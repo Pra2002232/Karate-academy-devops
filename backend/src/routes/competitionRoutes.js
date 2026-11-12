@@ -5,6 +5,11 @@ const router = express.Router();
 const pool = require("../config/db");
 
 const {
+    sendWhatsAppTemplateMessage,
+    getWhatsAppConfig
+} = require("../services/whatsappService");
+
+const {
     authenticateToken,
     authorizeRoles
 } = require("../middleware/authMiddleware");
@@ -44,6 +49,7 @@ router.get("/", async (req, res) => {
                 c.id,
                 c.competition_name,
                 c.competition_date,
+                c.reporting_time,
                 c.location,
                 c.organizer,
                 c.description,
@@ -317,6 +323,7 @@ router.get("/:id", async (req, res) => {
                     c.id,
                     c.competition_name,
                     c.competition_date,
+                    c.reporting_time,
                     c.location,
                     c.organizer,
                     c.description,
@@ -463,6 +470,7 @@ router.post(
             const {
                 competition_name,
                 competition_date,
+                reporting_time,
                 location,
                 organizer,
                 description
@@ -547,6 +555,7 @@ router.post(
                     (
                         competition_name,
                         competition_date,
+                        reporting_time,
                         location,
                         organizer,
                         description,
@@ -554,13 +563,14 @@ router.post(
                     )
 
                     VALUES
-                    ($1,$2,$3,$4,$5,$6)
+                    ($1,$2,$3,$4,$5,$6,$7)
 
                     RETURNING *
                     `,
                     [
                         competition_name.trim(),
                         competition_date,
+                        reporting_time || null,
                         location || null,
                         organizer || null,
                         description || null,
@@ -609,6 +619,7 @@ router.put(
             const {
                 competition_name,
                 competition_date,
+                reporting_time,
                 location,
                 organizer,
                 description,
@@ -719,15 +730,17 @@ router.put(
                 `UPDATE competitions
                  SET competition_name = $1,
                      competition_date = $2,
-                     location = $3,
-                     organizer = $4,
-                     description = $5,
-                     branch_id = $6
-                 WHERE id = $7
+                     reporting_time = $3,
+                     location = $4,
+                     organizer = $5,
+                     description = $6,
+                     branch_id = $7
+                 WHERE id = $8
                  RETURNING *`,
                 [
                     competition_name.trim(),
                     competition_date,
+                    reporting_time || null,
                     location || null,
                     organizer || null,
                     description || null,
@@ -1383,13 +1396,7 @@ router.post(
                         position,
                         remarks
                     )
-
-                    VALUES
-                    (
-                        $1,$2,$3,$4,
-                        $5,$6,$7,$8
-                    )
-
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
                     RETURNING *
                     `,
                     [
@@ -1404,14 +1411,265 @@ router.post(
                     ]
                 );
 
-            res.status(201).json({
+            const savedResult = inserted.rows[0];
 
-                message:
-                    "Competition result saved successfully",
+            // WhatsApp notification is separate from result saving.
+            // A WhatsApp failure must never undo the saved result.
+            let whatsappNotification = {
+                status: "NOT_PROCESSED"
+            };
 
-                result:
-                    inserted.rows[0]
+            try {
+                const notificationData = await pool.query(
+                    `
+                    SELECT
+                        s.id AS student_id,
+                        s.name AS student_name,
+                        s.parent_name,
+                        s.parent_mobile,
+                        s.whatsapp_opt_in,
+                        s.branch_id,
+                        c.id AS competition_id,
+                        c.competition_name,
+                        TO_CHAR(c.competition_date, 'YYYY-MM-DD')
+                            AS competition_date
+                    FROM students s
+                    JOIN competitions c
+                        ON c.id = $2
+                    WHERE s.id = $1
+                    `,
+                    [student_id, competition_id]
+                );
 
+                if (notificationData.rows.length === 0) {
+                    throw new Error(
+                        "Student or competition details unavailable for WhatsApp notification"
+                    );
+                }
+
+                const details = notificationData.rows[0];
+
+                let skipStatus = null;
+
+                if (details.whatsapp_opt_in !== true) {
+                    skipStatus = "SKIPPED_CONSENT";
+                } else if (!details.parent_mobile) {
+                    skipStatus = "SKIPPED_NO_PHONE";
+                }
+
+                let normalizedPhone = "";
+
+                if (!skipStatus) {
+                    normalizedPhone = String(details.parent_mobile)
+                        .replace(/\D/g, "");
+
+                    if (normalizedPhone.length === 10) {
+                        normalizedPhone = "91" + normalizedPhone;
+                    } else if (
+                        normalizedPhone.length === 11 &&
+                        normalizedPhone.startsWith("0")
+                    ) {
+                        normalizedPhone = "91" + normalizedPhone.slice(1);
+                    }
+
+                    if (
+                        normalizedPhone.length < 11 ||
+                        normalizedPhone.length > 15
+                    ) {
+                        skipStatus = "SKIPPED_INVALID_PHONE";
+                    }
+                }
+
+                const logInsert = await pool.query(
+                    `
+                    INSERT INTO competition_result_whatsapp_logs
+                    (
+                        result_id,
+                        competition_id,
+                        student_id,
+                        branch_id,
+                        recipient_key,
+                        recipient_phone,
+                        parent_name,
+                        template_name,
+                        status,
+                        created_by
+                    )
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'PENDING',$9)
+                    ON CONFLICT (result_id) DO NOTHING
+                    RETURNING id
+                    `,
+                    [
+                        savedResult.id,
+                        competition_id,
+                        student_id,
+                        details.branch_id,
+                        normalizedPhone || `RESULT_${savedResult.id}`,
+                        normalizedPhone || null,
+                        details.parent_name || null,
+                        "karate_competition_result",
+                        req.user.id
+                    ]
+                );
+
+                if (logInsert.rows.length === 0) {
+                    whatsappNotification = {
+                        status: "ALREADY_PROCESSED"
+                    };
+                } else {
+                    const logId = logInsert.rows[0].id;
+
+                    if (skipStatus) {
+                        await pool.query(
+                            `
+                            UPDATE competition_result_whatsapp_logs
+                            SET status = $1, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = $2
+                            `,
+                            [skipStatus, logId]
+                        );
+
+                        whatsappNotification = {
+                            status: skipStatus
+                        };
+                    } else {
+                        await pool.query(
+                            `
+                            UPDATE competition_result_whatsapp_logs
+                            SET status = 'SENDING',
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = $1 AND status = 'PENDING'
+                            `,
+                            [logId]
+                        );
+
+                        const positionText = detailsPosition => {
+                            const number = Number(detailsPosition);
+                            if (!Number.isInteger(number) || number < 1) {
+                                return "";
+                            }
+
+                            const suffix =
+                                number % 100 >= 11 && number % 100 <= 13
+                                    ? "th"
+                                    : ({ 1: "st", 2: "nd", 3: "rd" }[number % 10] || "th");
+
+                            return `${number}${suffix} Position`;
+                        };
+
+                        const placement = [
+                            positionText(savedResult.position),
+                            savedResult.medal
+                        ].filter(Boolean).join(" - ") || "Participation";
+
+                        const dateParts = String(details.competition_date)
+                            .split("-");
+
+                        const formattedDate =
+                            dateParts.length === 3
+                                ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`
+                                : String(details.competition_date);
+
+                        const parameters = [
+                            details.parent_name || "Parent",
+                            details.student_name || "Student",
+                            details.competition_name || "Competition",
+                            formattedDate,
+                            savedResult.result || "Result announced",
+                            placement
+                        ];
+
+                        try {
+                            const waResponse =
+                                await sendWhatsAppTemplateMessage(
+                                    normalizedPhone,
+                                    "karate_competition_result",
+                                    parameters,
+                                    "en_US"
+                                );
+
+                            const messageId =
+                                waResponse?.messages?.[0]?.id || null;
+
+                            await pool.query(
+                                `
+                                UPDATE competition_result_whatsapp_logs
+                                SET status = 'ACCEPTED',
+                                    message_id = $1,
+                                    error_message = NULL,
+                                    updated_at = CURRENT_TIMESTAMP
+                                WHERE id = $2
+                                `,
+                                [messageId, logId]
+                            );
+
+                            whatsappNotification = {
+                                status: "ACCEPTED",
+                                messageId
+                            };
+
+                        } catch (waError) {
+                            const errorMessage =
+                                waError.response?.data?.error?.message ||
+                                waError.message ||
+                                "WhatsApp sending failed";
+
+                            // Definitive Meta rejection: FAILED.
+                            // Timeout/network error: keep SENDING because
+                            // Meta may already have accepted the message.
+                            const definitiveRejection =
+                                Boolean(waError.response?.data?.error);
+
+                            const logStatus = definitiveRejection
+                                ? "FAILED"
+                                : "SENDING";
+
+                            try {
+                                await pool.query(
+                                    `
+                                    UPDATE competition_result_whatsapp_logs
+                                    SET status = $1,
+                                        error_message = $2,
+                                        updated_at = CURRENT_TIMESTAMP
+                                    WHERE id = $3
+                                    `,
+                                    [
+                                        logStatus,
+                                        String(errorMessage).slice(0, 4000),
+                                        logId
+                                    ]
+                                );
+                            } catch (logError) {
+                                console.error(
+                                    "Could not update WhatsApp notification log:",
+                                    logError.message
+                                );
+                            }
+
+                            whatsappNotification = {
+                                status: logStatus,
+                                message: errorMessage
+                            };
+                        }
+                    }
+                }
+
+            } catch (notificationError) {
+                console.error(
+                    "Competition result WhatsApp notification error:",
+                    notificationError.message
+                );
+
+                whatsappNotification = {
+                    status: "FAILED",
+                    message: notificationError.message
+                };
+            }
+
+            return res.status(201).json({
+                message: "Competition result saved successfully",
+                result: savedResult,
+                whatsappNotification
             });
 
         } catch (error) {
@@ -1560,6 +1818,686 @@ router.put(
 
         }
 
+    }
+);
+
+
+
+// ======================================================
+// WHATSAPP COMPETITION ANNOUNCEMENT PREVIEW
+// Preview only: this route NEVER sends WhatsApp messages.
+// ======================================================
+
+router.post(
+    "/:id/announcement-preview",
+    authorizeRoles("SUPER_ADMIN", "BRANCH_ADMIN"),
+    async (req, res) => {
+        try {
+            const competitionId = Number(req.params.id);
+
+            if (!Number.isInteger(competitionId) || competitionId <= 0) {
+                return res.status(400).json({
+                    message: "Invalid competition ID"
+                });
+            }
+
+            const competitionResult = await pool.query(
+                `
+                SELECT
+                    id,
+                    competition_name,
+                    TO_CHAR(competition_date, 'YYYY-MM-DD') AS competition_date,
+                    reporting_time,
+                    location,
+                    branch_id
+                FROM competitions
+                WHERE id = $1
+                `,
+                [competitionId]
+            );
+
+            if (competitionResult.rows.length === 0) {
+                return res.status(404).json({
+                    message: "Competition not found"
+                });
+            }
+
+            const competition = competitionResult.rows[0];
+            let targetBranchId = competition.branch_id;
+
+            if (req.user.role === "BRANCH_ADMIN") {
+                const adminResult = await pool.query(
+                    `
+                    SELECT branch_id
+                    FROM users
+                    WHERE id = $1
+                      AND role = 'BRANCH_ADMIN'
+                      AND status = 'ACTIVE'
+                    `,
+                    [req.user.id]
+                );
+
+                if (
+                    adminResult.rows.length === 0 ||
+                    !adminResult.rows[0].branch_id
+                ) {
+                    return res.status(403).json({
+                        message: "Active Branch Admin assignment not found"
+                    });
+                }
+
+                const assignedBranchId =
+                    Number(adminResult.rows[0].branch_id);
+
+                if (
+                    Number(req.user.branch_id) !== assignedBranchId
+                ) {
+                    return res.status(409).json({
+                        message: "Your login branch assignment is outdated. Please log out and log in again."
+                    });
+                }
+
+                if (
+                    competition.branch_id === null ||
+                    Number(competition.branch_id) !== assignedBranchId
+                ) {
+                    return res.status(403).json({
+                        message: "You can announce competitions only for your own branch"
+                    });
+                }
+
+                targetBranchId = assignedBranchId;
+            }
+
+            let studentQuery = `
+                SELECT
+                    branch_id,
+                    parent_name,
+                    parent_mobile,
+                    whatsapp_opt_in
+                FROM students
+                WHERE status = 'ACTIVE'
+            `;
+
+            const queryValues = [];
+
+            if (targetBranchId !== null) {
+                queryValues.push(targetBranchId);
+                studentQuery += ` AND branch_id = $1`;
+            }
+
+            const studentResult = await pool.query(
+                studentQuery,
+                queryValues
+            );
+
+            let optedOutStudents = 0;
+            let missingPhoneStudents = 0;
+            let invalidPhoneStudents = 0;
+            let validOptInStudents = 0;
+
+            const recipients = new Map();
+
+            for (const student of studentResult.rows) {
+                if (student.whatsapp_opt_in !== true) {
+                    optedOutStudents++;
+                    continue;
+                }
+
+                const rawPhone = String(
+                    student.parent_mobile || ""
+                ).trim();
+
+                if (!rawPhone) {
+                    missingPhoneStudents++;
+                    continue;
+                }
+
+                let phone = rawPhone.replace(/\D/g, "");
+
+                if (phone.length === 10) {
+                    phone = "91" + phone;
+                } else if (
+                    phone.length === 11 &&
+                    phone.startsWith("0")
+                ) {
+                    phone = "91" + phone.substring(1);
+                }
+
+                if (phone.length < 11 || phone.length > 15) {
+                    invalidPhoneStudents++;
+                    continue;
+                }
+
+                validOptInStudents++;
+
+                if (!recipients.has(phone)) {
+                    recipients.set(phone, {
+                        recipientKey: phone,
+                        phone,
+                        parentName: student.parent_name || "Parent",
+                        studentCount: 0
+                    });
+                }
+
+                recipients.get(phone).studentCount++;
+            }
+
+            const eligibleRecipients = recipients.size;
+
+            const reportingTime = competition.reporting_time
+                ? String(competition.reporting_time).substring(0, 5)
+                : null;
+
+            return res.json({
+                previewOnly: true,
+                messagesSent: 0,
+                competition: {
+                    id: competition.id,
+                    competition_name: competition.competition_name,
+                    competition_date: competition.competition_date,
+                    reporting_time: reportingTime,
+                    location: competition.location,
+                    branch_id: competition.branch_id
+                },
+                audience: {
+                    scope: targetBranchId === null
+                        ? "ALL_BRANCHES"
+                        : "SINGLE_BRANCH",
+                    activeStudentRecords: studentResult.rows.length,
+                    eligibleRecipients,
+                    optedOutStudents,
+                    missingPhoneStudents,
+                    invalidPhoneStudents,
+                    validOptInStudentRecords: validOptInStudents,
+                    duplicateStudentRecords:
+                        validOptInStudents - eligibleRecipients
+                },
+                template: {
+                    name: "karate_upcoming_competition",
+                    language: "en_US",
+                    parameterCount: 6
+                },
+                message: "Preview generated successfully. No WhatsApp messages were sent."
+            });
+
+        } catch (error) {
+            console.error(
+                "Competition WhatsApp preview error:",
+                error
+            );
+
+            return res.status(500).json({
+                message: "Failed to generate competition announcement preview"
+            });
+        }
+    }
+);
+
+
+
+// ======================================================
+// SEND WHATSAPP COMPETITION ANNOUNCEMENT
+// Requires explicit confirmation from the logged-in admin.
+// ======================================================
+
+router.post(
+    "/:id/announcement-send",
+    authorizeRoles("SUPER_ADMIN", "BRANCH_ADMIN"),
+    async (req, res) => {
+        try {
+            if (req.body?.confirm !== true) {
+                return res.status(400).json({
+                    message: "Explicit confirmation is required before sending."
+                });
+            }
+
+            const config = getWhatsAppConfig();
+
+            if (!config.configured) {
+                return res.status(503).json({
+                    message: "Meta WhatsApp credentials are not configured."
+                });
+            }
+
+            const competitionId = Number(req.params.id);
+
+            if (!Number.isInteger(competitionId) || competitionId <= 0) {
+                return res.status(400).json({
+                    message: "Invalid competition ID"
+                });
+            }
+
+            const competitionResult = await pool.query(
+                `
+                SELECT
+                    id,
+                    competition_name,
+                    TO_CHAR(competition_date, 'YYYY-MM-DD') AS competition_date,
+                    reporting_time,
+                    location,
+                    branch_id
+                FROM competitions
+                WHERE id = $1
+                `,
+                [competitionId]
+            );
+
+            if (competitionResult.rows.length === 0) {
+                return res.status(404).json({
+                    message: "Competition not found"
+                });
+            }
+
+            const competition = competitionResult.rows[0];
+            let targetBranchId = competition.branch_id;
+
+            if (req.user.role === "BRANCH_ADMIN") {
+                const adminResult = await pool.query(
+                    `
+                    SELECT branch_id
+                    FROM users
+                    WHERE id = $1
+                      AND role = 'BRANCH_ADMIN'
+                      AND status = 'ACTIVE'
+                    `,
+                    [req.user.id]
+                );
+
+                if (
+                    adminResult.rows.length === 0 ||
+                    !adminResult.rows[0].branch_id
+                ) {
+                    return res.status(403).json({
+                        message: "Active Branch Admin assignment not found"
+                    });
+                }
+
+                const assignedBranchId =
+                    Number(adminResult.rows[0].branch_id);
+
+                if (Number(req.user.branch_id) !== assignedBranchId) {
+                    return res.status(409).json({
+                        message: "Your login branch assignment is outdated. Please log in again."
+                    });
+                }
+
+                if (
+                    competition.branch_id === null ||
+                    Number(competition.branch_id) !== assignedBranchId
+                ) {
+                    return res.status(403).json({
+                        message: "You can announce competitions only for your own branch"
+                    });
+                }
+
+                targetBranchId = assignedBranchId;
+            }
+
+            if (!competition.reporting_time) {
+                return res.status(400).json({
+                    message: "Please add the competition reporting time before sending the announcement."
+                });
+            }
+
+            const dateValue = String(
+                competition.competition_date || ""
+            ).trim();
+
+            const dateParts = dateValue.split("-");
+
+            if (
+                dateParts.length !== 3 ||
+                !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)
+            ) {
+                return res.status(400).json({
+                    message: "Competition date is invalid."
+                });
+            }
+
+            const [year, month, day] = dateParts.map(Number);
+
+            const competitionDate = new Date(
+                Date.UTC(year, month - 1, day)
+            );
+
+            if (
+                competitionDate.getUTCFullYear() !== year ||
+                competitionDate.getUTCMonth() !== month - 1 ||
+                competitionDate.getUTCDate() !== day
+            ) {
+                return res.status(400).json({
+                    message: "Competition date is invalid."
+                });
+            }
+
+            const formattedDate = competitionDate.toLocaleDateString(
+                "en-IN",
+                {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    timeZone: "UTC"
+                }
+            );
+
+            const timeParts = String(
+                competition.reporting_time
+            ).substring(0, 5).split(":");
+
+            let formattedTime = String(competition.reporting_time);
+
+            if (timeParts.length === 2) {
+                let hour = Number(timeParts[0]);
+                const minute = timeParts[1];
+                const suffix = hour >= 12 ? "PM" : "AM";
+                hour = hour % 12 || 12;
+                formattedTime =
+                    `${String(hour).padStart(2, "0")}:${minute} ${suffix}`;
+            }
+
+            const studentValues = [];
+            let studentQuery = `
+                SELECT
+                    id,
+                    branch_id,
+                    parent_name,
+                    parent_mobile,
+                    whatsapp_opt_in
+                FROM students
+                WHERE status = 'ACTIVE'
+            `;
+
+            if (targetBranchId !== null) {
+                studentValues.push(targetBranchId);
+                studentQuery += " AND branch_id = $1";
+            }
+
+            studentQuery += " ORDER BY branch_id, id";
+
+            const studentResult = await pool.query(
+                studentQuery,
+                studentValues
+            );
+
+            const recipients = new Map();
+            const skipped = [];
+
+            for (const student of studentResult.rows) {
+                const branchId = Number(student.branch_id);
+
+                if (student.whatsapp_opt_in !== true) {
+                    skipped.push({
+                        student,
+                        branchId,
+                        status: "SKIPPED_CONSENT",
+                        key: `SKIPPED_CONSENT_${student.id}`
+                    });
+                    continue;
+                }
+
+                const rawPhone = String(
+                    student.parent_mobile || ""
+                ).trim();
+
+                if (!rawPhone) {
+                    skipped.push({
+                        student,
+                        branchId,
+                        status: "SKIPPED_NO_PHONE",
+                        key: `SKIPPED_NO_PHONE_${student.id}`
+                    });
+                    continue;
+                }
+
+                let phone = rawPhone.replace(/\D/g, "");
+
+                if (phone.length === 10) {
+                    phone = "91" + phone;
+                } else if (
+                    phone.length === 11 &&
+                    phone.startsWith("0")
+                ) {
+                    phone = "91" + phone.substring(1);
+                }
+
+                if (phone.length < 11 || phone.length > 15) {
+                    skipped.push({
+                        student,
+                        branchId,
+                        status: "SKIPPED_INVALID_PHONE",
+                        key: `SKIPPED_INVALID_PHONE_${student.id}`
+                    });
+                    continue;
+                }
+
+                if (!recipients.has(phone)) {
+                    recipients.set(phone, {
+                        phone,
+                        parentName: student.parent_name || "Parent",
+                        branchId,
+                        studentCount: 0
+                    });
+                }
+
+                recipients.get(phone).studentCount++;
+            }
+
+            // Record skipped student records for reporting.
+            for (const item of skipped) {
+                await pool.query(
+                    `
+                    INSERT INTO competition_whatsapp_notification_logs
+                    (
+                        competition_id,
+                        competition_name,
+                        branch_id,
+                        recipient_key,
+                        recipient_phone,
+                        parent_name,
+                        student_count,
+                        template_name,
+                        status,
+                        error_message,
+                        created_by
+                    )
+                    VALUES ($1,$2,$3,$4,$5,$6,1,$7,$8,$9,$10)
+                    ON CONFLICT (competition_id, recipient_key)
+                    WHERE competition_id IS NOT NULL
+                    DO NOTHING
+                    `,
+                    [
+                        competition.id,
+                        competition.competition_name,
+                        item.branchId,
+                        item.key,
+                        item.student.parent_mobile || null,
+                        item.student.parent_name || null,
+                        "karate_upcoming_competition",
+                        item.status,
+                        item.status,
+                        req.user.id
+                    ]
+                );
+            }
+
+            const summary = {
+                eligibleRecipients: recipients.size,
+                accepted: 0,
+                failed: 0,
+                alreadyProcessed: 0,
+                skippedConsent: skipped.filter(
+                    item => item.status === "SKIPPED_CONSENT"
+                ).length,
+                skippedNoPhone: skipped.filter(
+                    item => item.status === "SKIPPED_NO_PHONE"
+                ).length,
+                skippedInvalidPhone: skipped.filter(
+                    item => item.status === "SKIPPED_INVALID_PHONE"
+                ).length
+            };
+
+            for (const recipient of recipients.values()) {
+                const inserted = await pool.query(
+                    `
+                    INSERT INTO competition_whatsapp_notification_logs
+                    (
+                        competition_id,
+                        competition_name,
+                        branch_id,
+                        recipient_key,
+                        recipient_phone,
+                        parent_name,
+                        student_count,
+                        template_name,
+                        status,
+                        created_by
+                    )
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'PENDING',$9)
+                    ON CONFLICT (competition_id, recipient_key)
+                    WHERE competition_id IS NOT NULL
+                    DO NOTHING
+                    RETURNING id
+                    `,
+                    [
+                        competition.id,
+                        competition.competition_name,
+                        recipient.branchId,
+                        recipient.phone,
+                        recipient.phone,
+                        recipient.parentName,
+                        recipient.studentCount,
+                        "karate_upcoming_competition",
+                        req.user.id
+                    ]
+                );
+
+                let logId = inserted.rows[0]?.id;
+
+                if (!logId) {
+                    const existing = await pool.query(
+                        `
+                        SELECT id, status
+                        FROM competition_whatsapp_notification_logs
+                        WHERE competition_id = $1
+                          AND recipient_key = $2
+                        `,
+                        [competition.id, recipient.phone]
+                    );
+
+                    if (!existing.rows.length) {
+                        summary.failed++;
+                        continue;
+                    }
+
+                    const previousStatus = existing.rows[0].status;
+
+                    if (
+                        previousStatus !== "PENDING" &&
+                        previousStatus !== "FAILED"
+                    ) {
+                        summary.alreadyProcessed++;
+                        continue;
+                    }
+
+                    logId = existing.rows[0].id;
+                }
+
+                // Atomic claim prevents two requests sending the same message.
+                const claimed = await pool.query(
+                    `
+                    UPDATE competition_whatsapp_notification_logs
+                    SET status = 'SENDING',
+                        error_message = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = $1
+                      AND status IN ('PENDING', 'FAILED')
+                    RETURNING id
+                    `,
+                    [logId]
+                );
+
+                if (!claimed.rows.length) {
+                    summary.alreadyProcessed++;
+                    continue;
+                }
+
+                try {
+                    const response = await sendWhatsAppTemplateMessage(
+                        recipient.phone,
+                        "karate_upcoming_competition",
+                        [
+                            recipient.parentName,
+                            "Your child",
+                            competition.competition_name,
+                            formattedDate,
+                            formattedTime,
+                            competition.location || "Venue to be confirmed"
+                        ],
+                        "en_US"
+                    );
+
+                    const messageId =
+                        response?.messages?.[0]?.id || null;
+
+                    await pool.query(
+                        `
+                        UPDATE competition_whatsapp_notification_logs
+                        SET status = 'ACCEPTED',
+                            message_id = $1,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = $2
+                        `,
+                        [messageId, logId]
+                    );
+
+                    summary.accepted++;
+
+                } catch (sendError) {
+                    const errorMessage = String(
+                        sendError.response?.data?.error?.message ||
+                        sendError.message ||
+                        "WhatsApp send failed"
+                    ).substring(0, 1000);
+
+                    await pool.query(
+                        `
+                        UPDATE competition_whatsapp_notification_logs
+                        SET status = 'FAILED',
+                            error_message = $1,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = $2
+                        `,
+                        [errorMessage, logId]
+                    );
+
+                    summary.failed++;
+                }
+            }
+
+            return res.json({
+                message: "Competition WhatsApp announcement processing completed.",
+                competition: {
+                    id: competition.id,
+                    competition_name: competition.competition_name,
+                    competition_date: dateValue,
+                    reporting_time: formattedTime,
+                    location: competition.location
+                },
+                summary,
+                note: "ACCEPTED means Meta accepted the message request; it does not confirm delivery or reading."
+            });
+
+        } catch (error) {
+            console.error(
+                "Competition WhatsApp send error:",
+                error
+            );
+
+            return res.status(500).json({
+                message: "Failed to process competition WhatsApp announcement."
+            });
+        }
     }
 );
 

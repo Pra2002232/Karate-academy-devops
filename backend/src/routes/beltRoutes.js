@@ -1,7 +1,12 @@
 const express = require("express");
 const {
-    authenticateToken
+    authenticateToken,
+    authorizeRoles
 } = require("../middleware/authMiddleware");
+
+const {
+    sendWhatsAppTemplateMessage
+} = require("../services/whatsappService");
 
 const router = express.Router();
 
@@ -290,98 +295,355 @@ router.get("/examinations", async (req, res) => {
 | Schedule a grading examination
 |--------------------------------------------------------------------------
 */
-router.post("/examinations", async (req, res) => {
-    try {
-        const {
-            student_id,
-            current_belt_id,
-            target_belt_id,
-            examination_date,
-            examiner,
-            exam_fee,
-            notes
-        } = req.body;
+router.post(
+    "/examinations",
+    authorizeRoles("SUPER_ADMIN", "BRANCH_ADMIN"),
+    async (req, res) => {
+        let student;
+        let examination;
 
-        if (
-            !student_id ||
-            !target_belt_id ||
-            !examination_date
-        ) {
-            return res.status(400).json({
-                message: "student_id, target_belt_id and examination_date are required"
-            });
-        }
-
-        const studentCheck = await pool.query(
-            `
-            SELECT id, name, belt
-            FROM students
-            WHERE id = $1
-            `,
-            [student_id]
-        );
-
-        if (studentCheck.rows.length === 0) {
-            return res.status(404).json({
-                message: "Student not found"
-            });
-        }
-
-        const result = await pool.query(
-            `
-            INSERT INTO grading_examinations (
+        // First save the examination.
+        try {
+            const {
                 student_id,
                 current_belt_id,
                 target_belt_id,
                 examination_date,
+                reporting_time,
+                venue,
                 examiner,
                 exam_fee,
-                result,
                 notes
-            )
-            VALUES (
-                $1,
-                $2,
-                $3,
-                $4,
-                $5,
-                $6,
-                'SCHEDULED',
-                $7
-            )
-            RETURNING *
-            `,
-            [
-                student_id,
-                current_belt_id || null,
-                target_belt_id,
-                examination_date,
-                examiner || null,
-                exam_fee || null,
-                notes || null
-            ]
-        );
+            } = req.body;
 
-        res.status(201).json({
+            if (
+                !student_id ||
+                !target_belt_id ||
+                !examination_date ||
+                !reporting_time ||
+                !venue ||
+                !String(venue).trim()
+            ) {
+                return res.status(400).json({
+                    message: "Student, target belt, examination date, reporting time and venue are required"
+                });
+            }
+
+            if (!/^\d{2}:\d{2}$/.test(String(reporting_time))) {
+                return res.status(400).json({
+                    message: "Invalid reporting time. Use HH:MM format."
+                });
+            }
+
+            const studentResult = await pool.query(
+                `
+                SELECT
+                    s.id,
+                    s.name,
+                    s.parent_name,
+                    s.parent_mobile,
+                    s.whatsapp_opt_in,
+                    s.branch_id,
+                    COALESCE(
+                        bl.belt_name,
+                        s.belt,
+                        'Not specified'
+                    ) AS current_belt
+                FROM students s
+                LEFT JOIN belt_levels bl
+                    ON bl.id = $2
+                WHERE s.id = $1
+                `,
+                [student_id, current_belt_id || null]
+            );
+
+            if (!studentResult.rows.length) {
+                return res.status(404).json({
+                    message: "Student not found"
+                });
+            }
+
+            student = studentResult.rows[0];
+
+            const insertResult = await pool.query(
+                `
+                INSERT INTO grading_examinations (
+                    student_id,
+                    current_belt_id,
+                    target_belt_id,
+                    examination_date,
+                    reporting_time,
+                    venue,
+                    examiner,
+                    exam_fee,
+                    result,
+                    notes
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8,
+                    'SCHEDULED', $9
+                )
+                RETURNING *
+                `,
+                [
+                    student_id,
+                    current_belt_id || null,
+                    target_belt_id,
+                    examination_date,
+                    reporting_time,
+                    String(venue).trim(),
+                    examiner || null,
+                    exam_fee || null,
+                    notes || null
+                ]
+            );
+
+            examination = insertResult.rows[0];
+
+        } catch (error) {
+            console.error("Grading examination save error:", error);
+
+            return res.status(500).json({
+                message: "Failed to schedule grading examination"
+            });
+        }
+
+        // Notification is processed only after the examination is saved.
+        let whatsappNotification = {
+            status: "NOT_PROCESSED"
+        };
+
+        try {
+            const rawPhone = String(
+                student.parent_mobile || ""
+            ).replace(/\D/g, "");
+
+            let normalizedPhone = rawPhone;
+
+            if (normalizedPhone.length === 10) {
+                normalizedPhone = "91" + normalizedPhone;
+            } else if (
+                normalizedPhone.length === 11 &&
+                normalizedPhone.startsWith("0")
+            ) {
+                normalizedPhone = "91" + normalizedPhone.slice(1);
+            }
+
+            const validPhone = /^\d{11,15}$/.test(normalizedPhone);
+
+            let initialStatus;
+
+            if (student.whatsapp_opt_in !== true) {
+                initialStatus = "SKIPPED_CONSENT";
+            } else if (!rawPhone) {
+                initialStatus = "SKIPPED_NO_PHONE";
+            } else if (!validPhone) {
+                initialStatus = "SKIPPED_INVALID_PHONE";
+            } else {
+                initialStatus = "SENDING";
+            }
+
+            const logResult = await pool.query(
+                `
+                INSERT INTO grading_whatsapp_notification_logs (
+                    grading_examination_id,
+                    student_id,
+                    branch_id,
+                    recipient_key,
+                    recipient_phone,
+                    parent_name,
+                    template_name,
+                    status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (grading_examination_id)
+                DO NOTHING
+                RETURNING id
+                `,
+                [
+                    examination.id,
+                    student.id,
+                    student.branch_id,
+                    validPhone ? normalizedPhone : `STUDENT_${student.id}`,
+                    validPhone ? normalizedPhone : null,
+                    student.parent_name || null,
+                    "karate_belt_grading_reminder",
+                    initialStatus
+                ]
+            );
+
+            if (!logResult.rows.length) {
+                whatsappNotification = {
+                    status: "ALREADY_PROCESSED"
+                };
+            } else if (initialStatus !== "SENDING") {
+                whatsappNotification = {
+                    status: initialStatus
+                };
+            } else {
+                const logId = logResult.rows[0].id;
+
+                const examinationDateValue = examination.examination_date;
+
+                const dateString = examinationDateValue instanceof Date
+                    ? examinationDateValue.toISOString().slice(0, 10)
+                    : String(examinationDateValue).slice(0, 10);
+
+                const dateParts = dateString.split("-");
+
+                const monthNames = [
+                    "January", "February", "March", "April",
+                    "May", "June", "July", "August",
+                    "September", "October", "November", "December"
+                ];
+
+                const formattedDate = dateParts.length === 3
+                    ? `${Number(dateParts[2])} ${monthNames[Number(dateParts[1]) - 1]} ${dateParts[0]}`
+                    : dateString;
+
+                const timeParts = String(
+                    examination.reporting_time
+                ).slice(0, 5).split(":");
+
+                let formattedTime = String(examination.reporting_time);
+
+                if (timeParts.length === 2) {
+                    let hour = Number(timeParts[0]);
+                    const minute = timeParts[1];
+                    const suffix = hour >= 12 ? "PM" : "AM";
+
+                    hour = hour % 12 || 12;
+
+                    formattedTime =
+                        `${String(hour).padStart(2, "0")}:${minute} ${suffix}`;
+                }
+
+                const parameters = [
+                    student.parent_name || "Parent",
+                    student.name || "Student",
+                    student.current_belt || "Not specified",
+                    formattedDate,
+                    formattedTime,
+                    examination.venue
+                ];
+
+                let waResult;
+                let sendSucceeded = false;
+
+                // Keep the provider request separate from database logging.
+                try {
+                    waResult = await sendWhatsAppTemplateMessage(
+                        normalizedPhone,
+                        "karate_belt_grading_reminder",
+                        parameters,
+                        "en_US"
+                    );
+                    sendSucceeded = true;
+                } catch (waError) {
+                    const definiteFailure = Boolean(
+                        waError.response?.data?.error
+                    );
+
+                    const failureStatus = definiteFailure
+                        ? "FAILED"
+                        : "SENDING";
+
+                    const errorMessage = String(
+                        waError.response?.data?.error?.message ||
+                        waError.message ||
+                        "WhatsApp request failed"
+                    ).slice(0, 2000);
+
+                    try {
+                        await pool.query(
+                            `
+                            UPDATE grading_whatsapp_notification_logs
+                            SET
+                                status = $2,
+                                error_message = $3,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = $1
+                            `,
+                            [logId, failureStatus, errorMessage]
+                        );
+                    } catch (logError) {
+                        console.error(
+                            "WhatsApp failure log update failed:",
+                            logError
+                        );
+                    }
+
+                    console.error(
+                        "Grading WhatsApp error:",
+                        errorMessage
+                    );
+
+                    whatsappNotification = {
+                        status: failureStatus,
+                        message: definiteFailure
+                            ? "WhatsApp provider rejected the message"
+                            : "Delivery outcome uncertain; automatic retry disabled"
+                    };
+                }
+
+                // Meta accepted the request. A later DB error must not
+                // reclassify the WhatsApp send as failed.
+                if (sendSucceeded) {
+                    const messageId =
+                        waResult?.messages?.[0]?.id || null;
+
+                    whatsappNotification = {
+                        status: "ACCEPTED",
+                        messageId
+                    };
+
+                    try {
+                        await pool.query(
+                            `
+                            UPDATE grading_whatsapp_notification_logs
+                            SET
+                                status = 'ACCEPTED',
+                                message_id = $2,
+                                error_message = NULL,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = $1
+                            `,
+                            [logId, messageId]
+                        );
+                    } catch (logError) {
+                        console.error(
+                            "WhatsApp accepted-message log update failed:",
+                            logError
+                        );
+
+                        whatsappNotification.logWarning =
+                            "Meta accepted the message, but the database log update failed. Do not resend automatically.";
+                    }
+                }
+
+            }
+
+        } catch (notificationError) {
+            console.error(
+                "Grading WhatsApp processing error:",
+                notificationError
+            );
+
+            whatsappNotification = {
+                status: "LOG_FAILED",
+                message: "Examination saved, but notification processing failed"
+            };
+        }
+
+        return res.status(201).json({
             message: "Grading examination scheduled successfully",
-            examination: result.rows[0]
-        });
-
-    } catch (error) {
-        console.error("POST /api/belts/examinations error:", error);
-        res.status(500).json({
-            message: "Failed to schedule grading examination"
+            examination,
+            whatsappNotification
         });
     }
-});
+);
 
 
-/*
-|--------------------------------------------------------------------------
-| PUT /api/belts/examinations/:id
-| Update examination scores/result
-|--------------------------------------------------------------------------
-*/
 router.put("/examinations/:id", async (req, res) => {
     try {
         const { id } = req.params;
@@ -471,6 +733,8 @@ router.put("/examinations/:id", async (req, res) => {
 */
 router.post("/promote", async (req, res) => {
     const client = await pool.connect();
+    let transactionStarted = false;
+    let transactionCommitted = false;
 
     try {
         const {
@@ -489,13 +753,13 @@ router.post("/promote", async (req, res) => {
         }
 
         await client.query("BEGIN");
+        transactionStarted = true;
 
-        /*
-         * Get student
-         */
         const studentResult = await client.query(
             `
-            SELECT id, name, belt
+            SELECT
+                id, name, belt, parent_name, parent_mobile,
+                whatsapp_opt_in, branch_id
             FROM students
             WHERE id = $1
             FOR UPDATE
@@ -503,58 +767,60 @@ router.post("/promote", async (req, res) => {
             [student_id]
         );
 
-        if (studentResult.rows.length === 0) {
+        if (!studentResult.rows.length) {
             throw new Error("Student not found");
         }
 
         const student = studentResult.rows[0];
+        let examination = null;
 
-        /*
-         * Get target belt
-         */
+        if (examination_id) {
+            const examinationResult = await client.query(
+                `
+                SELECT id, examination_date
+                FROM grading_examinations
+                WHERE id = $1 AND student_id = $2
+                FOR UPDATE
+                `,
+                [examination_id, student_id]
+            );
+
+            if (!examinationResult.rows.length) {
+                throw new Error("Grading examination not found for this student");
+            }
+
+            examination = examinationResult.rows[0];
+        }
+
         const beltResult = await client.query(
             `
-            SELECT
-                id,
-                belt_name,
-                kyu_level
+            SELECT id, belt_name, kyu_level
             FROM belt_levels
-            WHERE id = $1
-            AND is_active = TRUE
+            WHERE id = $1 AND is_active = TRUE
             `,
             [target_belt_id]
         );
 
-        if (beltResult.rows.length === 0) {
+        if (!beltResult.rows.length) {
             throw new Error("Target belt not found");
         }
 
         const targetBelt = beltResult.rows[0];
+        const newBelt = targetBelt.belt_name.toUpperCase();
 
-        /*
-         * Mark existing current grades as history
-         */
         await client.query(
             `
             UPDATE student_grades
             SET status = 'HISTORY'
-            WHERE student_id = $1
-            AND status = 'CURRENT'
+            WHERE student_id = $1 AND status = 'CURRENT'
             `,
             [student_id]
         );
 
-        /*
-         * Create new current grade
-         */
         await client.query(
             `
             INSERT INTO student_grades (
-                student_id,
-                belt_level_id,
-                grade,
-                promoted_date,
-                status
+                student_id, belt_level_id, grade, promoted_date, status
             )
             VALUES ($1, $2, $3, $4, 'CURRENT')
             `,
@@ -566,83 +832,257 @@ router.post("/promote", async (req, res) => {
             ]
         );
 
-        /*
-         * Add belt history
-         */
         await client.query(
             `
             INSERT INTO belt_history (
-                student_id,
-                previous_belt,
-                new_belt,
-                grading_date,
-                remarks
+                student_id, previous_belt, new_belt, grading_date, remarks
             )
             VALUES ($1, $2, $3, $4, $5)
             `,
-            [
-                student_id,
-                student.belt,
-                targetBelt.belt_name.toUpperCase(),
-                promoted_date,
-                remarks || null
-            ]
+            [student_id, student.belt, newBelt, promoted_date, remarks || null]
         );
 
-        /*
-         * Update student's current belt
-         */
         await client.query(
-            `
-            UPDATE students
-            SET belt = $1
-            WHERE id = $2
-            `,
-            [
-                targetBelt.belt_name.toUpperCase(),
-                student_id
-            ]
+            `UPDATE students SET belt = $1 WHERE id = $2`,
+            [newBelt, student_id]
         );
 
-        /*
-         * Mark examination as passed
-         */
         if (examination_id) {
             await client.query(
                 `
                 UPDATE grading_examinations
-                SET
-                    result = 'PASSED',
-                    target_belt_id = $1
-                WHERE id = $2
-                AND student_id = $3
+                SET result = 'PASSED', target_belt_id = $1
+                WHERE id = $2 AND student_id = $3
                 `,
-                [
-                    target_belt_id,
-                    examination_id,
-                    student_id
-                ]
+                [target_belt_id, examination_id, student_id]
             );
         }
 
+        // Commit the promotion before attempting WhatsApp.
         await client.query("COMMIT");
+        transactionCommitted = true;
 
-        res.json({
+        let whatsappNotification = {
+            status: examination_id
+                ? "NOT_PROCESSED"
+                : "SKIPPED_NO_EXAMINATION"
+        };
+
+        if (examination) {
+            try {
+                const rawPhone = String(student.parent_mobile || "").trim();
+                let normalizedPhone = rawPhone.replace(/\D/g, "");
+
+                if (normalizedPhone.startsWith("0")) {
+                    normalizedPhone = "91" + normalizedPhone.slice(1);
+                } else if (normalizedPhone.length === 10) {
+                    normalizedPhone = "91" + normalizedPhone;
+                }
+
+                const validPhone = /^\d{11,15}$/.test(normalizedPhone);
+                let initialStatus;
+
+                if (student.whatsapp_opt_in !== true) {
+                    initialStatus = "SKIPPED_CONSENT";
+                } else if (!rawPhone) {
+                    initialStatus = "SKIPPED_NO_PHONE";
+                } else if (!validPhone) {
+                    initialStatus = "SKIPPED_INVALID_PHONE";
+                } else {
+                    initialStatus = "SENDING";
+                }
+
+                // Unique examination ID prevents duplicate result messages.
+                const logResult = await client.query(
+                    `
+                    INSERT INTO grading_result_whatsapp_notification_logs (
+                        grading_examination_id,
+                        student_id,
+                        branch_id,
+                        recipient_key,
+                        recipient_phone,
+                        parent_name,
+                        template_name,
+                        status,
+                        created_by
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ON CONFLICT (grading_examination_id) DO NOTHING
+                    RETURNING id
+                    `,
+                    [
+                        examination.id,
+                        student.id,
+                        student.branch_id,
+                        validPhone ? normalizedPhone : `STUDENT_${student.id}`,
+                        validPhone ? normalizedPhone : null,
+                        student.parent_name || null,
+                        "karate_belt_grading_result",
+                        initialStatus,
+                        req.user?.id || null
+                    ]
+                );
+
+                if (!logResult.rows.length) {
+                    whatsappNotification = { status: "ALREADY_PROCESSED" };
+
+                } else if (initialStatus !== "SENDING") {
+                    whatsappNotification = { status: initialStatus };
+
+                } else {
+                    const logId = logResult.rows[0].id;
+                    const dateValue = examination.examination_date;
+
+                    const dateString = dateValue instanceof Date
+                        ? dateValue.toISOString().slice(0, 10)
+                        : String(dateValue).slice(0, 10);
+
+                    const dateParts = dateString.split("-");
+                    const monthNames = [
+                        "January", "February", "March", "April",
+                        "May", "June", "July", "August",
+                        "September", "October", "November", "December"
+                    ];
+
+                    const examinationDate = dateParts.length === 3
+                        ? `${Number(dateParts[2])} ${monthNames[Number(dateParts[1]) - 1]} ${dateParts[0]}`
+                        : dateString;
+
+                    let waResult;
+                    let sendSucceeded = false;
+
+                    try {
+                        waResult = await sendWhatsAppTemplateMessage(
+                            normalizedPhone,
+                            "karate_belt_grading_result",
+                            [
+                                student.parent_name || "Parent",
+                                student.name || "Student",
+                                student.belt || "Not specified",
+                                newBelt,
+                                examinationDate,
+                                "Passed / Promoted"
+                            ],
+                            "en_US"
+                        );
+
+                        sendSucceeded = true;
+
+                    } catch (waError) {
+                        const definiteFailure = Boolean(
+                            waError.response?.data?.error
+                        );
+
+                        const failureStatus = definiteFailure
+                            ? "FAILED"
+                            : "SENDING";
+
+                        const errorMessage = String(
+                            waError.response?.data?.error?.message ||
+                            waError.message ||
+                            "WhatsApp request failed"
+                        ).slice(0, 2000);
+
+                        try {
+                            await client.query(
+                                `
+                                UPDATE grading_result_whatsapp_notification_logs
+                                SET status = $2,
+                                    error_message = $3,
+                                    updated_at = CURRENT_TIMESTAMP
+                                WHERE id = $1
+                                `,
+                                [logId, failureStatus, errorMessage]
+                            );
+                        } catch (logError) {
+                            console.error(
+                                "Grading result WhatsApp failure log update failed:",
+                                logError
+                            );
+                        }
+
+                        console.error(
+                            "Grading result WhatsApp error:",
+                            errorMessage
+                        );
+
+                        whatsappNotification = {
+                            status: failureStatus,
+                            message: definiteFailure
+                                ? "WhatsApp provider rejected the message"
+                                : "Delivery outcome uncertain; automatic retry disabled"
+                        };
+                    }
+
+                    if (sendSucceeded) {
+                        const messageId =
+                            waResult?.messages?.[0]?.id || null;
+
+                        whatsappNotification = {
+                            status: "ACCEPTED",
+                            messageId
+                        };
+
+                        try {
+                            await client.query(
+                                `
+                                UPDATE grading_result_whatsapp_notification_logs
+                                SET status = 'ACCEPTED',
+                                    message_id = $2,
+                                    error_message = NULL,
+                                    updated_at = CURRENT_TIMESTAMP
+                                WHERE id = $1
+                                `,
+                                [logId, messageId]
+                            );
+                        } catch (logError) {
+                            console.error(
+                                "Grading result WhatsApp accepted-message log update failed:",
+                                logError
+                            );
+
+                            whatsappNotification.logWarning =
+                                "Meta accepted the message, but the database log update failed. Do not resend automatically.";
+                        }
+                    }
+                }
+
+            } catch (notificationError) {
+                console.error(
+                    "Grading result WhatsApp processing error:",
+                    notificationError
+                );
+
+                whatsappNotification = {
+                    status: "LOG_FAILED",
+                    message: "Promotion succeeded, but notification processing failed"
+                };
+            }
+        }
+
+        return res.json({
             message: "Student promoted successfully",
             student_id,
             student_name: student.name,
             previous_belt: student.belt,
-            new_belt: targetBelt.belt_name.toUpperCase(),
+            new_belt: newBelt,
             grade: grade || targetBelt.kyu_level,
-            promoted_date
+            promoted_date,
+            whatsappNotification
         });
 
     } catch (error) {
-        await client.query("ROLLBACK");
+        if (transactionStarted && !transactionCommitted) {
+            try {
+                await client.query("ROLLBACK");
+            } catch (rollbackError) {
+                console.error("Promotion transaction rollback error:", rollbackError);
+            }
+        }
 
         console.error("POST /api/belts/promote error:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             message: error.message || "Failed to promote student"
         });
 

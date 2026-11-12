@@ -42,6 +42,31 @@ const DEFAULT_SETTINGS = {
     maintenance_mode: false
 };
 
+const BATCH_DAYS = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday"
+];
+
+const EMPTY_BATCH_FORM = {
+    batch_name: "",
+    branch_id: "",
+    days: [],
+    start_time: "",
+    end_time: ""
+};
+
+function extractRows(data, key) {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.[key])) return data[key];
+    if (Array.isArray(data?.data)) return data.data;
+    return [];
+}
+
 function Settings() {
 
     const [activeSection, setActiveSection] =
@@ -55,6 +80,16 @@ function Settings() {
 
     const [saving, setSaving] =
         useState(false);
+
+    // Dynamic batch management
+    const [batches, setBatches] = useState([]);
+    const [branches, setBranches] = useState([]);
+    const [batchLoading, setBatchLoading] = useState(false);
+    const [batchSaving, setBatchSaving] = useState(false);
+    const [editingBatchId, setEditingBatchId] = useState(null);
+    const [batchForm, setBatchForm] = useState({
+        ...EMPTY_BATCH_FORM
+    });
 
 
     // =====================================================
@@ -91,8 +126,40 @@ function Settings() {
     };
 
 
+    const loadBatchData = async () => {
+        setBatchLoading(true);
+
+        try {
+            const [batchResult, branchResult] = await Promise.allSettled([
+                api.get("/batches", {
+                    params: { include_inactive: true }
+                }),
+                api.get("/branches")
+            ]);
+
+            if (batchResult.status === "fulfilled") {
+                setBatches(
+                    extractRows(batchResult.value.data, "batches")
+                );
+            } else {
+                console.error("Batch loading error:", batchResult.reason);
+            }
+
+            if (branchResult.status === "fulfilled") {
+                setBranches(
+                    extractRows(branchResult.value.data, "branches")
+                );
+            } else {
+                console.error("Branch loading error:", branchResult.reason);
+            }
+        } finally {
+            setBatchLoading(false);
+        }
+    };
+
     useEffect(() => {
         loadSettings();
+        loadBatchData();
     }, []);
 
 
@@ -158,6 +225,137 @@ function Settings() {
 
 
     // =====================================================
+    // BATCH MANAGEMENT ACTIONS
+    // =====================================================
+
+    const resetBatchForm = () => {
+        setBatchForm({ ...EMPTY_BATCH_FORM });
+        setEditingBatchId(null);
+    };
+
+    const editBatch = (batch) => {
+        setEditingBatchId(batch.id);
+
+        setBatchForm({
+            batch_name: batch.batch_name || "",
+            branch_id: batch.branch_id == null
+                ? ""
+                : String(batch.branch_id),
+            days: Array.isArray(batch.days) ? batch.days : [],
+            start_time: batch.start_time
+                ? String(batch.start_time).slice(0, 5)
+                : "",
+            end_time: batch.end_time
+                ? String(batch.end_time).slice(0, 5)
+                : ""
+        });
+
+        setActiveSection("batches");
+    };
+
+    const saveBatch = async () => {
+        if (!batchForm.batch_name.trim()) {
+            alert("Please enter a batch name.");
+            return;
+        }
+
+        if (!batchForm.days.length) {
+            alert("Please select at least one training day.");
+            return;
+        }
+
+        if (
+            Boolean(batchForm.start_time) !==
+            Boolean(batchForm.end_time)
+        ) {
+            alert("Enter both start and end times, or leave both empty.");
+            return;
+        }
+
+        if (
+            batchForm.start_time &&
+            batchForm.start_time >= batchForm.end_time
+        ) {
+            alert("End time must be later than start time.");
+            return;
+        }
+
+        const payload = {
+            batch_name: batchForm.batch_name.trim(),
+            branch_id: batchForm.branch_id === ""
+                ? null
+                : Number(batchForm.branch_id),
+            days: batchForm.days,
+            start_time: batchForm.start_time || null,
+            end_time: batchForm.end_time || null
+        };
+
+        try {
+            setBatchSaving(true);
+
+            if (editingBatchId) {
+                await api.put(`/batches/${editingBatchId}`, payload);
+                alert("Batch updated successfully.");
+            } else {
+                await api.post("/batches", payload);
+                alert("Batch created successfully.");
+            }
+
+            resetBatchForm();
+            await loadBatchData();
+        } catch (error) {
+            console.error("Save batch error:", error);
+            alert(
+                error.response?.data?.error ||
+                error.response?.data?.message ||
+                "Unable to save batch."
+            );
+        } finally {
+            setBatchSaving(false);
+        }
+    };
+
+    const changeBatchStatus = async (batch) => {
+        const action = batch.is_active ? "deactivate" : "activate";
+
+        if (!window.confirm(`Are you sure you want to ${action} this batch?`)) {
+            return;
+        }
+
+        try {
+            await api.patch(`/batches/${batch.id}/status`, {
+                is_active: !batch.is_active
+            });
+
+            await loadBatchData();
+        } catch (error) {
+            alert(
+                error.response?.data?.error ||
+                "Unable to update batch status."
+            );
+        }
+    };
+
+    const deleteBatch = async (batch) => {
+        if (!window.confirm(
+            `Delete "${batch.batch_name}"? Assigned batches cannot be deleted.`
+        )) {
+            return;
+        }
+
+        try {
+            await api.delete(`/batches/${batch.id}`);
+            alert("Batch deleted successfully.");
+            await loadBatchData();
+        } catch (error) {
+            alert(
+                error.response?.data?.error ||
+                "Unable to delete batch. Deactivate it if students are assigned."
+            );
+        }
+    };
+
+    // =====================================================
     // SECTION MENU
     // =====================================================
 
@@ -171,6 +369,11 @@ function Settings() {
             id: "admin",
             icon: "👤",
             title: "Admin Account"
+        },
+        {
+            id: "batches",
+            icon: "🥋",
+            title: "Batch Management"
         },
         {
             id: "configuration",
@@ -406,6 +609,233 @@ function Settings() {
                         </section>
                     )}
 
+
+                    {/* ================================= */}
+                    {/* BATCH MANAGEMENT */}
+                    {/* ================================= */}
+
+                    {activeSection === "batches" && (
+                        <section className="settings-card batch-management">
+
+                            <SettingsHeading
+                                title="Batch Management"
+                                subtitle="Create and manage training batches for individual branches or all branches."
+                            />
+
+                            <div className="batch-form-card">
+                                <h3>
+                                    {editingBatchId ? "Edit Batch" : "Create New Batch"}
+                                </h3>
+
+                                <div className="settings-grid">
+                                    <div className="settings-field">
+                                        <label>Batch Name *</label>
+                                        <input
+                                            type="text"
+                                            value={batchForm.batch_name}
+                                            placeholder="e.g. Edukidz International"
+                                            onChange={(e) =>
+                                                setBatchForm(prev => ({
+                                                    ...prev,
+                                                    batch_name: e.target.value
+                                                }))
+                                            }
+                                        />
+                                    </div>
+
+                                    <div className="settings-field">
+                                        <label>Branch Assignment *</label>
+                                        <select
+                                            value={batchForm.branch_id}
+                                            onChange={(e) =>
+                                                setBatchForm(prev => ({
+                                                    ...prev,
+                                                    branch_id: e.target.value
+                                                }))
+                                            }
+                                        >
+                                            <option value="">All Branches</option>
+                                            {branches.map(branch => (
+                                                <option
+                                                    key={branch.id}
+                                                    value={branch.id}
+                                                >
+                                                    {branch.branch_name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="settings-field">
+                                        <label>Start Time (optional)</label>
+                                        <input
+                                            type="time"
+                                            value={batchForm.start_time}
+                                            onChange={(e) =>
+                                                setBatchForm(prev => ({
+                                                    ...prev,
+                                                    start_time: e.target.value
+                                                }))
+                                            }
+                                        />
+                                    </div>
+
+                                    <div className="settings-field">
+                                        <label>End Time (optional)</label>
+                                        <input
+                                            type="time"
+                                            value={batchForm.end_time}
+                                            onChange={(e) =>
+                                                setBatchForm(prev => ({
+                                                    ...prev,
+                                                    end_time: e.target.value
+                                                }))
+                                            }
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="batch-days-field">
+                                    <label>Training Days *</label>
+
+                                    <div className="batch-days-grid">
+                                        {BATCH_DAYS.map(day => (
+                                            <label
+                                                className="batch-day-option"
+                                                key={day}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={batchForm.days.includes(day)}
+                                                    onChange={() =>
+                                                        setBatchForm(prev => ({
+                                                            ...prev,
+                                                            days: prev.days.includes(day)
+                                                                ? prev.days.filter(item => item !== day)
+                                                                : [...prev.days, day]
+                                                        }))
+                                                    }
+                                                />
+                                                <span>{day}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="batch-form-actions">
+                                    <button
+                                        type="button"
+                                        className="batch-primary-button"
+                                        onClick={saveBatch}
+                                        disabled={batchSaving}
+                                    >
+                                        {batchSaving
+                                            ? "Saving..."
+                                            : editingBatchId
+                                                ? "Update Batch"
+                                                : "Create Batch"}
+                                    </button>
+
+                                    {editingBatchId && (
+                                        <button
+                                            type="button"
+                                            className="batch-secondary-button"
+                                            onClick={resetBatchForm}
+                                        >
+                                            Cancel Edit
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="batch-list-heading">
+                                <h3>Existing Batches</h3>
+                                <button
+                                    type="button"
+                                    className="batch-secondary-button"
+                                    onClick={loadBatchData}
+                                    disabled={batchLoading}
+                                >
+                                    Refresh
+                                </button>
+                            </div>
+
+                            {batchLoading ? (
+                                <p>Loading batches...</p>
+                            ) : batches.length === 0 ? (
+                                <div className="settings-info-box">
+                                    No batches found. Create your first batch above.
+                                </div>
+                            ) : (
+                                <div className="batch-list">
+                                    {batches.map(batch => (
+                                        <div className="batch-list-item" key={batch.id}>
+                                            <div className="batch-list-details">
+                                                <div className="batch-list-title">
+                                                    <strong>{batch.batch_name}</strong>
+                                                    <span className={
+                                                        batch.is_active
+                                                            ? "batch-status active"
+                                                            : "batch-status inactive"
+                                                    }>
+                                                        {batch.is_active ? "Active" : "Inactive"}
+                                                    </span>
+                                                </div>
+
+                                                <p>
+                                                    <strong>Days:</strong>{" "}
+                                                    {(batch.days || []).join(", ")}
+                                                </p>
+
+                                                <p>
+                                                    <strong>Time:</strong>{" "}
+                                                    {batch.start_time
+                                                        ? `${String(batch.start_time).slice(0, 5)} - ${String(batch.end_time).slice(0, 5)}`
+                                                        : "Not specified"}
+                                                </p>
+
+                                                <p>
+                                                    <strong>Branch:</strong>{" "}
+                                                    {batch.branch_name || "All Branches"}
+                                                </p>
+                                            </div>
+
+                                            <div className="batch-list-actions">
+                                                <button
+                                                    type="button"
+                                                    className="batch-secondary-button"
+                                                    onClick={() => editBatch(batch)}
+                                                >
+                                                    Edit
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    className="batch-secondary-button"
+                                                    onClick={() => changeBatchStatus(batch)}
+                                                >
+                                                    {batch.is_active ? "Deactivate" : "Activate"}
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    className="batch-delete-button"
+                                                    onClick={() => deleteBatch(batch)}
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="settings-note">
+                                Batches assigned to students cannot be deleted.
+                                Deactivate them instead to prevent new assignments.
+                            </div>
+                        </section>
+                    )}
 
                     {/* ================================= */}
                     {/* CONFIGURATION */}

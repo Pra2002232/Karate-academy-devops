@@ -20,6 +20,7 @@ function Icon({ children, className = "" }) {
 function Attendance() {
     const [students, setStudents] = useState([]);
     const [attendance, setAttendance] = useState({});
+    const [batches, setBatches] = useState([]);
 
     const [date, setDate] = useState(
         new Date().toISOString().split("T")[0]
@@ -35,6 +36,22 @@ function Attendance() {
     useEffect(() => {
         loadData();
     }, [date]);
+
+    useEffect(() => {
+        loadBatches();
+    }, []);
+
+    async function loadBatches() {
+        try {
+            const response = await api.get("/batches", {
+                params: { include_inactive: true }
+            });
+            setBatches(response.data.batches || []);
+        } catch (error) {
+            console.error("Batch loading error:", error);
+            setBatches([]);
+        }
+    }
 
 	async function loadData() {
     try {
@@ -174,9 +191,17 @@ function Attendance() {
                     ?.toLowerCase()
                     .includes(query);
 
+            const selectedBatch = batches.find(
+                (batch) => String(batch.id) === batchFilter
+            );
+
             const matchesBatch =
                 batchFilter === "ALL" ||
-                student.batch === batchFilter;
+                String(student.batch_id || "") === batchFilter ||
+                (
+                    !student.batch_id &&
+                    student.batch === selectedBatch?.batch_name
+                );
 
             return matchesSearch && matchesBatch;
         });
@@ -375,12 +400,27 @@ function Attendance() {
                             <option value="ALL">
                                 All Batches
                             </option>
-                            <option value="Morning Batch">
-                                Morning Batch
-                            </option>
-                            <option value="Evening Batch">
-                                Evening Batch
-                            </option>
+
+                            {batches
+                                .filter((batch) =>
+                                    batch.is_active ||
+                                    students.some(
+                                        (student) =>
+                                            String(student.batch_id) === String(batch.id)
+                                    )
+                                )
+                                .map((batch) => (
+                                    <option
+                                        key={batch.id}
+                                        value={String(batch.id)}
+                                    >
+                                        {batch.batch_name}
+                                        {batch.days?.length
+                                            ? ` — ${batch.days.join(", ")}`
+                                            : ""}
+                                        {!batch.is_active ? " (Inactive)" : ""}
+                                    </option>
+                                ))}
                         </select>
 
                     </div>

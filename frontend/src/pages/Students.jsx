@@ -3,6 +3,7 @@ import api from "../services/api";
 
 function Students() {
     const [students, setStudents] = useState([]);
+    const [batches, setBatches] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
@@ -19,12 +20,24 @@ function Students() {
         address: "",
         joining_date: "",
         belt: "WHITE",
-        batch: "Morning Batch"
+        batch_id: "",
+        batch: ""
     });
 
     useEffect(() => {
         loadStudents();
+        loadBatches();
     }, []);
+
+    async function loadBatches() {
+        try {
+            const response = await api.get("/batches");
+            setBatches(response.data.batches || []);
+        } catch (err) {
+            console.error("Batch loading error:", err);
+            setBatches([]);
+        }
+    }
 
     async function loadStudents() {
         try {
@@ -69,7 +82,8 @@ function Students() {
             address: "",
             joining_date: "",
             belt: "WHITE",
-            batch: "Morning Batch"
+            batch_id: "",
+            batch: ""
         });
 
         setShowForm(true);
@@ -92,7 +106,10 @@ function Students() {
                 ? student.joining_date.substring(0, 10)
                 : "",
             belt: student.belt || "WHITE",
-            batch: student.batch || "Morning Batch"
+            batch_id: student.batch_id
+                ? String(student.batch_id)
+                : "",
+            batch: student.batch || ""
         });
 
         setShowForm(true);
@@ -107,13 +124,27 @@ function Students() {
         event.preventDefault();
 
         try {
+            const payload = { ...form };
+
             if (editingStudent) {
+                const originalBatchId =
+                    editingStudent.batch_id == null
+                        ? ""
+                        : String(editingStudent.batch_id);
+
+                // If the batch was not changed, let the backend
+                // retain the existing assignment, even if inactive.
+                if (payload.batch_id === originalBatchId) {
+                    delete payload.batch_id;
+                    delete payload.batch;
+                }
+
                 await api.put(
                     `/students/${editingStudent.id}`,
-                    form
+                    payload
                 );
             } else {
-                await api.post("/students", form);
+                await api.post("/students", payload);
             }
 
             closeForm();
@@ -655,19 +686,50 @@ function Students() {
                                     </span>
 
                                     <select
-                                        name="batch"
-                                        value={form.batch}
-                                        onChange={
-                                            handleChange
-                                        }
+                                        name="batch_id"
+                                        value={form.batch_id}
+                                        onChange={(e) => {
+                                            const selectedId = e.target.value;
+                                            const selectedBatch = batches.find(
+                                                batch =>
+                                                    String(batch.id) === selectedId
+                                            );
+
+                                            setForm(previous => ({
+                                                ...previous,
+                                                batch_id: selectedId,
+                                                batch: selectedBatch
+                                                    ? selectedBatch.batch_name
+                                                    : ""
+                                            }));
+                                        }}
                                     >
-                                        <option value="Morning Batch">
-                                            Morning Batch
+                                        <option value="">
+                                            Select Training Batch
                                         </option>
 
-                                        <option value="Evening Batch">
-                                            Evening Batch
-                                        </option>
+                                        {batches
+                                            .filter(batch =>
+                                                batch.is_active ||
+                                                String(batch.id) === form.batch_id
+                                            )
+                                            .map(batch => (
+                                                <option
+                                                    key={batch.id}
+                                                    value={String(batch.id)}
+                                                >
+                                                    {batch.batch_name}
+                                                    {batch.days?.length
+                                                        ? ` - ${batch.days.join(", ")}`
+                                                        : ""}
+                                                    {batch.start_time
+                                                        ? ` (${String(batch.start_time).slice(0, 5)} - ${String(batch.end_time).slice(0, 5)})`
+                                                        : ""}
+                                                    {!batch.is_active
+                                                        ? " (Inactive - Existing Assignment)"
+                                                        : ""}
+                                                </option>
+                                            ))}
                                     </select>
                                 </label>
 

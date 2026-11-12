@@ -5,6 +5,7 @@ import "./Competitions.css";
 const emptyForm = {
     competition_name: "",
     competition_date: "",
+    reporting_time: "",
     location: "",
     organizer: "",
     description: ""
@@ -56,10 +57,78 @@ const [selectedCompetition, setSelectedCompetition] = useState(null);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
+    const [announcementPreview, setAnnouncementPreview] = useState(null);
+    const [announcementLoading, setAnnouncementLoading] = useState(false);
+    const [announcementSending, setAnnouncementSending] = useState(false);
+    const [announcementError, setAnnouncementError] = useState("");
+    const [announcementResult, setAnnouncementResult] = useState(null);
+
 
     useEffect(() => {
         loadData();
     }, []);
+
+
+    useEffect(() => {
+        const id = selectedCompetition?.competition?.id;
+        if (!showAnnouncementModal || !id) return;
+
+        let active = true;
+        setAnnouncementPreview(null);
+        setAnnouncementResult(null);
+        setAnnouncementError("");
+        setAnnouncementLoading(true);
+
+        api.post(`/competitions/${id}/announcement-preview`)
+            .then(response => {
+                if (active) setAnnouncementPreview(response.data);
+            })
+            .catch(err => {
+                if (active) {
+                    setAnnouncementError(
+                        err.response?.data?.message ||
+                        "Unable to load announcement preview."
+                    );
+                }
+            })
+            .finally(() => {
+                if (active) setAnnouncementLoading(false);
+            });
+
+        return () => { active = false; };
+    }, [showAnnouncementModal, selectedCompetition]);
+
+    const sendCompetitionAnnouncement = async () => {
+        const id = selectedCompetition?.competition?.id;
+        const count = announcementPreview?.audience?.eligibleRecipients;
+
+        if (!id || !count || announcementSending || announcementResult) return;
+
+        const confirmed = window.confirm(
+            `Send real WhatsApp messages to ${count} unique parent mobile numbers?`
+        );
+
+        if (!confirmed) return;
+
+        try {
+            setAnnouncementSending(true);
+            setAnnouncementError("");
+
+            const response = await api.post(
+                `/competitions/${id}/announcement-send`,
+                { confirm: true }
+            );
+
+            setAnnouncementResult(response.data);
+        } catch (err) {
+            setAnnouncementError(
+                err.response?.data?.message ||
+                "WhatsApp announcement failed."
+            );
+        } finally {
+            setAnnouncementSending(false);
+        }
+    };
 
     const loadData = async () => {
         try {
@@ -152,6 +221,9 @@ const [selectedCompetition, setSelectedCompetition] = useState(null);
             competition_name: competition.competition_name || "",
             competition_date: competition.competition_date
                 ? competition.competition_date.substring(0, 10)
+                : "",
+            reporting_time: competition.reporting_time
+                ? String(competition.reporting_time).slice(0, 5)
                 : "",
             location: competition.location || "",
             organizer: competition.organizer || "",
@@ -532,6 +604,24 @@ const formatDate = (date) => {
                                         </p>
                                     </div>
 
+                                    {competition.reporting_time && (
+                                        <div>
+                                            <span>⏰</span>
+                                            <p>
+                                                Reporting Time:{" "}
+                                                {(() => {
+                                                    const [hours, minutes] = String(
+                                                        competition.reporting_time
+                                                    ).slice(0, 5).split(":");
+
+                                                    const hour = Number(hours);
+
+                                                    return `${String(hour % 12 || 12).padStart(2, "0")}:${minutes} ${hour >= 12 ? "PM" : "AM"}`;
+                                                })()}
+                                            </p>
+                                        </div>
+                                    )}
+
                                     <div>
                                         <span>👥</span>
                                         <p>
@@ -696,6 +786,19 @@ const formatDate = (date) => {
                                     />
                                 </div>
 
+                            </div>
+
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label>Reporting Time</label>
+                                    <input
+                                        type="time"
+                                        name="reporting_time"
+                                        value={form.reporting_time}
+                                        onChange={handleFormChange}
+                                    />
+                                    <small>Time when participants should report at the venue.</small>
+                                </div>
                             </div>
 
                             <div className="form-group full">
@@ -1199,157 +1302,113 @@ const formatDate = (date) => {
                     </div>
                 )}
 
-            {/* ANNOUNCEMENT MODAL */}
-            {showAnnouncementModal &&
-                selectedCompetition && (
-                    <div className="competition-modal-overlay">
-
-                        <div className="competition-modal announcement-modal">
-
-                            <div className="modal-header">
-
-                                <div>
-                                    <div className="modal-label">
-                                        PARENT ANNOUNCEMENT
-                                    </div>
-
-                                    <h2>
-                                        📢 Upcoming Competition
-                                    </h2>
-
-                                    <p>
-                                        Send registration invitation
-                                        to active students' parents.
-                                    </p>
-                                </div>
-
-                                <button
-                                    className="modal-close"
-                                    onClick={() =>
-                                        setShowAnnouncementModal(
-                                            false
-                                        )
-                                    }
-                                >
-                                    ×
-                                </button>
-
+            {/* WHATSAPP COMPETITION ANNOUNCEMENT */}
+            {showAnnouncementModal && selectedCompetition && (
+                <div className="competition-modal-overlay">
+                    <div className="competition-modal announcement-modal">
+                        <div className="modal-header">
+                            <div>
+                                <div className="modal-label">PARENT ANNOUNCEMENT</div>
+                                <h2>📢 WhatsApp Competition Announcement</h2>
+                                <p>Approved Meta template: karate_upcoming_competition</p>
                             </div>
-
-                            <div className="announcement-preview">
-
-                                <div className="preview-audience">
-                                    <span>Audience</span>
-                                    <strong>
-                                        ALL ACTIVE STUDENTS' PARENTS
-                                    </strong>
-                                </div>
-
-                                <div className="preview-message">
-
-                                    <p>
-                                        Dear Parent,
-                                    </p>
-
-                                    <p>
-                                        Our academy is participating
-                                        in{" "}
-                                        <strong>
-                                            {
-                                                selectedCompetition
-                                                    .competition
-                                                    .competition_name
-                                            }
-                                        </strong>
-                                        .
-                                    </p>
-
-                                    <p>
-                                        📅 Date:{" "}
-                                        <strong>
-                                            {formatDate(
-                                                selectedCompetition
-                                                    .competition
-                                                    .competition_date
-                                            )}
-                                        </strong>
-                                    </p>
-
-                                    <p>
-                                        📍 Location:{" "}
-                                        <strong>
-                                            {
-                                                selectedCompetition
-                                                    .competition
-                                                    .location
-                                            }
-                                        </strong>
-                                    </p>
-
-                                    <p>
-                                        Students interested in
-                                        participating are requested
-                                        to register with the academy
-                                        before the registration
-                                        deadline.
-                                    </p>
-
-                                    <p>
-                                        Thank you,
-                                        <br />
-                                        United Shotokan Karate
-                                        Association India
-                                    </p>
-
-                                </div>
-
-                            </div>
-
-                            <div className="announcement-note">
-                                <strong>WhatsApp integration:</strong>
-
-                                <span>
-                                    This announcement will be connected
-                                    to the centralized Meta WhatsApp
-                                    notification system after the
-                                    messaging module is completed.
-                                </span>
-                            </div>
-
-                            <div className="modal-footer">
-
-                                <button
-                                    className="secondary-btn"
-                                    onClick={() =>
-                                        setShowAnnouncementModal(
-                                            false
-                                        )
-                                    }
-                                >
-                                    Close
-                                </button>
-
-                                <button
-                                    className="competition-primary-btn"
-                                    onClick={() => {
-                                        setMessage(
-                                            "Announcement is ready. Meta WhatsApp integration will be connected later."
-                                        );
-                                        setShowAnnouncementModal(
-                                            false
-                                        );
-                                    }}
-                                >
-                                    Prepare Announcement
-                                </button>
-
-                            </div>
-
+                            <button
+                                className="modal-close"
+                                onClick={() => setShowAnnouncementModal(false)}
+                                disabled={announcementSending}
+                            >
+                                ×
+                            </button>
                         </div>
 
-                    </div>
-                )}
+                        <div className="announcement-preview">
+                            {announcementLoading && <p>Loading recipient preview...</p>}
 
+                            {announcementError && (
+                                <p className="form-error">{announcementError}</p>
+                            )}
+
+                            {announcementPreview && (
+                                <>
+                                    <div className="preview-audience">
+                                        <span>Audience</span>
+                                        <strong>
+                                            {announcementPreview.audience.scope === "ALL_BRANCHES"
+                                                ? "ALL ACADEMY BRANCHES"
+                                                : "ASSIGNED BRANCH"}
+                                        </strong>
+                                    </div>
+
+                                    <div className="preview-message">
+                                        <p><strong>{announcementPreview.competition.competition_name}</strong></p>
+                                        <p>📅 Date: <strong>{formatDate(announcementPreview.competition.competition_date)}</strong></p>
+                                        <p>⏰ Reporting time: <strong>{announcementPreview.competition.reporting_time || "Not set"}</strong></p>
+                                        <p>📍 Venue: <strong>{announcementPreview.competition.location || "Not set"}</strong></p>
+                                    </div>
+
+                                    <div className="preview-message">
+                                        <h3>Recipient summary</h3>
+                                        <p>Eligible unique parents: <strong>{announcementPreview.audience.eligibleRecipients}</strong></p>
+                                        <p>Opted-out records: <strong>{announcementPreview.audience.optedOutStudents}</strong></p>
+                                        <p>Missing phone: <strong>{announcementPreview.audience.missingPhoneStudents}</strong></p>
+                                        <p>Invalid phone: <strong>{announcementPreview.audience.invalidPhoneStudents}</strong></p>
+                                        <p>Duplicate student records grouped: <strong>{announcementPreview.audience.duplicateStudentRecords}</strong></p>
+                                    </div>
+                                </>
+                            )}
+
+                            {announcementResult && (
+                                <div className="announcement-note">
+                                    <strong>WhatsApp processing result</strong>
+                                    <p>Accepted: {announcementResult.summary.accepted}</p>
+                                    <p>Failed: {announcementResult.summary.failed}</p>
+                                    <p>Already processed: {announcementResult.summary.alreadyProcessed}</p>
+                                    <p>Skipped consent: {announcementResult.summary.skippedConsent}</p>
+                                    <p>Skipped no phone: {announcementResult.summary.skippedNoPhone}</p>
+                                    <p>Skipped invalid phone: {announcementResult.summary.skippedInvalidPhone}</p>
+                                    <small>{announcementResult.note}</small>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="announcement-note">
+                            <strong>WhatsApp sending</strong>
+                            <span>
+                                Messages are sent only after you confirm. ACCEPTED means
+                                Meta accepted the request, not necessarily delivered.
+                            </span>
+                        </div>
+
+                        <div className="modal-footer">
+                            <button
+                                className="secondary-btn"
+                                onClick={() => setShowAnnouncementModal(false)}
+                                disabled={announcementSending}
+                            >
+                                Close
+                            </button>
+
+                            <button
+                                className="competition-primary-btn"
+                                onClick={sendCompetitionAnnouncement}
+                                disabled={
+                                    announcementLoading ||
+                                    announcementSending ||
+                                    !announcementPreview ||
+                                    announcementPreview.audience.eligibleRecipients === 0 ||
+                                    Boolean(announcementResult)
+                                }
+                            >
+                                {announcementSending
+                                    ? "Sending..."
+                                    : announcementResult
+                                        ? "Processing Completed"
+                                        : `Send WhatsApp (${announcementPreview?.audience?.eligibleRecipients ?? 0})`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -247,6 +247,7 @@ router.post(
                 joining_date,
                 belt,
                 batch,
+                batch_id,
                 branch_id
             } = req.body;
 
@@ -435,57 +436,106 @@ router.post(
 
 
             // ---------------------------------------------
-            // INSERT
+            // ---------------------------------------------
+            // VALIDATE DYNAMIC BATCH
             // ---------------------------------------------
 
-            const result =
-                await pool.query(
+            let finalBatchId = null;
+            let finalBatchName = null;
+
+            if (batch_id !== undefined && batch_id !== null && batch_id !== "") {
+                const selectedBatchId = Number(batch_id);
+
+                if (!Number.isInteger(selectedBatchId) || selectedBatchId <= 0) {
+                    return res.status(400).json({
+                        message: "Invalid batch selection"
+                    });
+                }
+
+                const batchCheck = await pool.query(
                     `
-                    INSERT INTO students
-                    (
-                        student_code,
-                        name,
-                        date_of_birth,
-                        gender,
-                        parent_name,
-                        parent_mobile,
-                        address,
-                        joining_date,
-                        belt,
-                        batch,
-                        branch_id
-                    )
-                    VALUES
-                    (
-                        $1,
-                        $2,
-                        $3,
-                        $4,
-                        $5,
-                        $6,
-                        $7,
-                        $8,
-                        $9,
-                        $10,
-                        $11
-                    )
-                    RETURNING *
+                    SELECT id, batch_name
+                    FROM batches
+                    WHERE id = $1
+                      AND is_active = TRUE
+                      AND (branch_id IS NULL OR branch_id = $2)
                     `,
-                    [
-                        student_code.trim(),
-                        name.trim(),
-                        date_of_birth || null,
-                        gender || null,
-                        parent_name.trim(),
-                        parent_mobile.trim(),
-                        address || null,
-                        joining_date || null,
-                        belt || "WHITE",
-                        batch || null,
-                        finalBranchId
-                    ]
+                    [selectedBatchId, finalBranchId]
                 );
 
+                if (batchCheck.rows.length === 0) {
+                    return res.status(400).json({
+                        message: "Selected batch is inactive or unavailable for this branch"
+                    });
+                }
+
+                finalBatchId = batchCheck.rows[0].id;
+                finalBatchName = batchCheck.rows[0].batch_name;
+
+            } else if (batch && batch.trim()) {
+                const legacyBatch = await pool.query(
+                    `
+                    SELECT id, batch_name
+                    FROM batches
+                    WHERE LOWER(batch_name) = LOWER($1)
+                      AND is_active = TRUE
+                      AND (branch_id IS NULL OR branch_id = $2)
+                    ORDER BY (branch_id IS NULL) ASC, id ASC
+                    LIMIT 1
+                    `,
+                    [batch.trim(), finalBranchId]
+                );
+
+                if (legacyBatch.rows.length === 0) {
+                    return res.status(400).json({
+                        message: "Selected batch is not available. Please select a valid batch."
+                    });
+                }
+
+                finalBatchId = legacyBatch.rows[0].id;
+                finalBatchName = legacyBatch.rows[0].batch_name;
+            }
+
+            // ---------------------------------------------
+            // INSERT STUDENT
+            // ---------------------------------------------
+
+            const result = await pool.query(
+                `
+                INSERT INTO students
+                (
+                    student_code,
+                    name,
+                    date_of_birth,
+                    gender,
+                    parent_name,
+                    parent_mobile,
+                    address,
+                    joining_date,
+                    belt,
+                    batch,
+                    batch_id,
+                    branch_id
+                )
+                VALUES
+                ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                RETURNING *
+                `,
+                [
+                    student_code.trim(),
+                    name.trim(),
+                    date_of_birth || null,
+                    gender || null,
+                    parent_name.trim(),
+                    parent_mobile.trim(),
+                    address || null,
+                    joining_date || null,
+                    belt || "WHITE",
+                    finalBatchName,
+                    finalBatchId,
+                    finalBranchId
+                ]
+            );
 
             res.status(201).json({
 
@@ -562,17 +612,16 @@ router.post(
 router.put(
     "/:id",
     authenticateToken,
-    authorizeRoles(
-        "SUPER_ADMIN",
-        "BRANCH_ADMIN"
-    ),
+    authorizeRoles("SUPER_ADMIN", "BRANCH_ADMIN"),
     async (req, res) => {
-
         try {
+            const id = Number(req.params.id);
 
-            const {
-                id
-            } = req.params;
+            if (!Number.isInteger(id) || id <= 0) {
+                return res.status(400).json({
+                    message: "Invalid student ID"
+                });
+            }
 
             const {
                 name,
@@ -583,164 +632,207 @@ router.put(
                 address,
                 belt,
                 batch,
-                status
+                status,
+                batch_id
             } = req.body;
 
+            // Fetch student within the caller's permitted scope.
+            let studentResult;
+
+            if (req.user.role === "SUPER_ADMIN") {
+                studentResult = await pool.query(
+                    `
+                    SELECT id, branch_id, batch_id, batch
+                    FROM students
+                    WHERE id = $1
+                    `,
+                    [id]
+                );
+            } else {
+                studentResult = await pool.query(
+                    `
+                    SELECT id, branch_id, batch_id, batch
+                    FROM students
+                    WHERE id = $1
+                      AND branch_id = $2
+                    `,
+                    [id, req.user.branch_id]
+                );
+            }
+
+            if (studentResult.rows.length === 0) {
+                return res.status(404).json({
+                    message: "Student not found"
+                });
+            }
+
+            const existingStudent = studentResult.rows[0];
+            const studentBranchId = existingStudent.branch_id;
+
+            let finalBatchId = existingStudent.batch_id;
+            let finalBatchName = existingStudent.batch;
+
+            // Only change batch assignment if the request includes it.
+            if (Object.prototype.hasOwnProperty.call(req.body, "batch_id")) {
+
+                if (batch_id === null || batch_id === "") {
+                    finalBatchId = null;
+                    finalBatchName = null;
+
+                } else {
+                    const selectedBatchId = Number(batch_id);
+
+                    if (!Number.isInteger(selectedBatchId) || selectedBatchId <= 0) {
+                        return res.status(400).json({
+                            message: "Invalid batch selection"
+                        });
+                    }
+
+                    const batchCheck = await pool.query(
+                        `
+                        SELECT id, batch_name
+                        FROM batches
+                        WHERE id = $1
+                          AND is_active = TRUE
+                          AND (branch_id IS NULL OR branch_id = $2)
+                        `,
+                        [selectedBatchId, studentBranchId]
+                    );
+
+                    if (batchCheck.rows.length === 0) {
+                        return res.status(400).json({
+                            message: "Selected batch is inactive or unavailable for this student's branch"
+                        });
+                    }
+
+                    finalBatchId = batchCheck.rows[0].id;
+                    finalBatchName = batchCheck.rows[0].batch_name;
+                }
+
+            } else if (Object.prototype.hasOwnProperty.call(req.body, "batch")) {
+
+                if (batch === null || batch === "") {
+                    finalBatchId = null;
+                    finalBatchName = null;
+
+                } else {
+                    const legacyBatch = await pool.query(
+                        `
+                        SELECT id, batch_name
+                        FROM batches
+                        WHERE LOWER(batch_name) = LOWER($1)
+                          AND is_active = TRUE
+                          AND (branch_id IS NULL OR branch_id = $2)
+                        ORDER BY (branch_id IS NULL) ASC, id ASC
+                        LIMIT 1
+                        `,
+                        [String(batch).trim(), studentBranchId]
+                    );
+
+                    if (legacyBatch.rows.length === 0) {
+                        return res.status(400).json({
+                            message: "Selected batch is not available for this student's branch"
+                        });
+                    }
+
+                    finalBatchId = legacyBatch.rows[0].id;
+                    finalBatchName = legacyBatch.rows[0].batch_name;
+                }
+            }
+
+            const values = [
+                name || null,                  // $1
+                date_of_birth || null,          // $2
+                gender || null,                 // $3
+                parent_name || null,            // $4
+                parent_mobile || null,          // $5
+                address || null,                // $6
+                belt || null,                   // $7
+                status || null,                 // $8
+                finalBatchId,                   // $9
+                finalBatchName,                 // $10
+                id                              // $11
+            ];
 
             let result;
 
-
-            if (
-                req.user.role ===
-                "SUPER_ADMIN"
-            ) {
-
+            if (req.user.role === "SUPER_ADMIN") {
                 result = await pool.query(
                     `
                     UPDATE students
                     SET
-                        name =
-                            COALESCE($1, name),
-
-                        date_of_birth =
-                            COALESCE($2, date_of_birth),
-
-                        gender =
-                            COALESCE($3, gender),
-
-                        parent_name =
-                            COALESCE($4, parent_name),
-
-                        parent_mobile =
-                            COALESCE($5, parent_mobile),
-
-                        address =
-                            COALESCE($6, address),
-
-                        belt =
-                            COALESCE($7, belt),
-
-                        batch =
-                            COALESCE($8, batch),
-
-                        status =
-                            COALESCE($9, status)
-
-                    WHERE id = $10
-
+                        name = COALESCE($1, name),
+                        date_of_birth = COALESCE($2, date_of_birth),
+                        gender = COALESCE($3, gender),
+                        parent_name = COALESCE($4, parent_name),
+                        parent_mobile = COALESCE($5, parent_mobile),
+                        address = COALESCE($6, address),
+                        belt = COALESCE($7, belt),
+                        status = COALESCE($8, status),
+                        batch_id = $9,
+                        batch = $10
+                    WHERE id = $11
                     RETURNING *
                     `,
-                    [
-                        name || null,
-                        date_of_birth || null,
-                        gender || null,
-                        parent_name || null,
-                        parent_mobile || null,
-                        address || null,
-                        belt || null,
-                        batch || null,
-                        status || null,
-                        id
-                    ]
+                    values
                 );
-
             } else {
-
                 result = await pool.query(
                     `
                     UPDATE students
                     SET
-                        name =
-                            COALESCE($1, name),
-
-                        date_of_birth =
-                            COALESCE($2, date_of_birth),
-
-                        gender =
-                            COALESCE($3, gender),
-
-                        parent_name =
-                            COALESCE($4, parent_name),
-
-                        parent_mobile =
-                            COALESCE($5, parent_mobile),
-
-                        address =
-                            COALESCE($6, address),
-
-                        belt =
-                            COALESCE($7, belt),
-
-                        batch =
-                            COALESCE($8, batch),
-
-                        status =
-                            COALESCE($9, status)
-
-                    WHERE id = $10
-                    AND branch_id = $11
-
+                        name = COALESCE($1, name),
+                        date_of_birth = COALESCE($2, date_of_birth),
+                        gender = COALESCE($3, gender),
+                        parent_name = COALESCE($4, parent_name),
+                        parent_mobile = COALESCE($5, parent_mobile),
+                        address = COALESCE($6, address),
+                        belt = COALESCE($7, belt),
+                        status = COALESCE($8, status),
+                        batch_id = $9,
+                        batch = $10
+                    WHERE id = $11
+                      AND branch_id = $12
                     RETURNING *
                     `,
-                    [
-                        name || null,
-                        date_of_birth || null,
-                        gender || null,
-                        parent_name || null,
-                        parent_mobile || null,
-                        address || null,
-                        belt || null,
-                        batch || null,
-                        status || null,
-                        id,
-                        req.user.branch_id
-                    ]
+                    [...values, req.user.branch_id]
                 );
-
             }
 
-
-            if (
-                result.rows.length === 0
-            ) {
-
+            if (result.rows.length === 0) {
                 return res.status(404).json({
-                    message:
-                        "Student not found"
+                    message: "Student not found"
                 });
-
             }
-
 
             res.json({
-
-                message:
-                    "Student updated successfully",
-
-                student:
-                    result.rows[0]
-
+                message: "Student updated successfully",
+                student: result.rows[0]
             });
 
         } catch (error) {
+            console.error("Update Student Error:", error);
 
-            console.error(
-                "Update Student Error:",
-                error
-            );
+            if (error.code === "23503") {
+                return res.status(400).json({
+                    message: "Invalid batch or student reference"
+                });
+            }
+
+            if (error.code === "42501") {
+                return res.status(403).json({
+                    message: "You are not allowed to update this student"
+                });
+            }
 
             res.status(500).json({
-                message:
-                    "Internal server error"
+                message: "Internal server error"
             });
-
         }
-
     }
 );
 
 
-// =====================================================
 // DELETE STUDENT
 // =====================================================
 

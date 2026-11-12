@@ -5,3 +5,5 @@ node_modules
 .git
 npm-debug.log*
 Dockerfile/
+*.backup*
+*.bak
