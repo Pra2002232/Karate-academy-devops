@@ -1,0 +1,1655 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@600;700&display=swap');
+
+/* Clean V3 stylesheet matching the approved NextGen login reference. */
+.ng-login-page,
+.ng-login-page * {
+  box-sizing: border-box;
+}
+
+.ng-login-page {
+  --ng-red: #f20b3b;
+  --ng-red-deep: #c90032;
+  --ng-gold: #edb22d;
+  --ng-white: #f7f7f8;
+  --ng-muted: #c0bdc5;
+
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.925fr) minmax(520px, 1fr);
+  overflow: hidden;
+  color: var(--ng-white);
+  background: #08080b;
+  font-family: Inter, Arial, sans-serif;
+}
+
+/* LEFT / HERO PANEL */
+.ng-hero-panel {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 10px clamp(34px, 3.6vw, 62px) 26px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 1% 45%, rgba(151, 0, 37, .24), transparent 44%),
+    radial-gradient(ellipse at 88% 82%, rgba(128, 0, 35, .24), transparent 42%),
+    linear-gradient(112deg, #08090d 0%, #0b0a0f 62%, #1a0710 100%);
+}
+
+.ng-hero-panel::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  opacity: .3;
+  pointer-events: none;
+  background:
+    linear-gradient(122deg, transparent 0 70%, rgba(121, 0, 30, .10) 71%, rgba(121, 0, 30, .10) 75%, transparent 76%),
+    repeating-linear-gradient(135deg, transparent 0 86px, rgba(255,255,255,.016) 87px 88px, transparent 89px 174px);
+}
+
+.ng-hero-panel::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -15%;
+  right: -8%;
+  width: 31%;
+  height: 135%;
+  transform: rotate(31deg);
+  background: linear-gradient(90deg, transparent, rgba(158, 0, 37, .12), transparent);
+  pointer-events: none;
+}
+
+.ng-hero-glow {
+  position: absolute;
+  z-index: -1;
+  width: min(560px, 48vw);
+  aspect-ratio: 1;
+  left: -245px;
+  top: 21%;
+  border: 2px solid rgba(225, 0, 44, .18);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 18px rgba(225,0,44,.035),
+    0 0 0 38px rgba(225,0,44,.025),
+    inset 0 0 80px rgba(225,0,44,.07);
+}
+
+/* Academy brand header */
+.ng-hero-brand {
+  position: relative;
+  z-index: 3;
+  flex: 0 0 auto;
+  min-height: clamp(176px, 20vh, 194px);
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 1.3vw, 24px);
+}
+
+.ng-hero-logo {
+  display: block;
+  flex: 0 0 auto;
+  width: clamp(205px, 14.8vw, 250px);
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 50%;
+  filter: drop-shadow(0 7px 14px rgba(0,0,0,.58));
+}
+
+.ng-brand-divider {
+  align-self: center;
+  flex: 0 0 3px;
+  width: 3px;
+  height: clamp(112px, 13vh, 145px);
+  background: var(--ng-gold);
+  box-shadow: 0 0 14px rgba(233,173,47,.35);
+}
+
+.ng-brand-copy {
+  min-width: 0;
+  transform: translateY(-1px);
+}
+
+.ng-brand-name {
+  font-family: Montserrat, Inter, sans-serif;
+  font-size: clamp(52px, 4.25vw, 72px);
+  line-height: .96;
+  letter-spacing: -.052em;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.ng-brand-name span,
+.ng-card-academy-name span {
+  color: var(--ng-red);
+}
+
+.ng-brand-subtitle {
+  margin-top: 7px;
+  font-family: Montserrat, Inter, sans-serif;
+  font-weight: 800;
+  font-size: clamp(20px, 2vw, 32px);
+  line-height: 1.08;
+  letter-spacing: -.025em;
+  white-space: nowrap;
+}
+
+.ng-affiliation-line {
+  margin-top: 12px;
+  color: #f3e8d6;
+  font-size: clamp(10px, .83vw, 14px);
+  font-weight: 800;
+  letter-spacing: .055em;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+/* Main hero artwork and slogan */
+.ng-hero-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: 41.5% 58.5%;
+  align-items: center;
+  margin: 0 -4px 12px;
+}
+
+.ng-hero-art-wrap {
+  position: absolute;
+  z-index: 0;
+  left: -6.2%;
+  top: 0;
+  bottom: 0;
+  width: 49%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  overflow: visible;
+  pointer-events: none;
+
+  /* The wrapper starts outside the panel and fades only toward the text side.
+     This avoids a visible rectangular edge without fading away the feet/floor. */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 66%,
+    rgba(0,0,0,.9) 76%,
+    rgba(0,0,0,.45) 88%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 66%,
+    rgba(0,0,0,.9) 76%,
+    rgba(0,0,0,.45) 88%,
+    transparent 100%
+  );
+}
+
+.ng-hero-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left bottom;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 15px 22px rgba(0,0,0,.42));
+}
+
+.ng-hero-message {
+  grid-column: 2;
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  min-width: 0;
+  padding: 8px 0 16px 0;
+  margin-left: -3px;
+  transform: translateY(-5px);
+  text-shadow: 0 3px 15px rgba(0,0,0,.45);
+}
+
+.ng-hero-kicker {
+  display: none;
+}
+
+.ng-hero-message h1 {
+  margin: 0;
+  font-family: Montserrat, Inter, sans-serif;
+  font-size: clamp(64px, 4.85vw, 82px);
+  font-weight: 900;
+  line-height: .985;
+  letter-spacing: -.057em;
+}
+
+.ng-hero-message h1 span {
+  color: var(--ng-red);
+}
+
+.ng-values-list {
+  list-style: none;
+  margin: 22px 0 0 34px;
+  padding: 0;
+  max-width: 440px;
+}
+
+.ng-value-item {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  min-height: 55px;
+  border-bottom: 1px solid rgba(233,173,47,.22);
+  font-size: clamp(14px, 1.06vw, 18px);
+  font-weight: 800;
+  letter-spacing: .035em;
+}
+
+.ng-value-item:last-child {
+  border-bottom: 0;
+}
+
+.ng-value-number {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  border: 1.5px solid var(--ng-red);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 0 12px rgba(242,11,59,.28), inset 0 0 8px rgba(242,11,59,.12);
+}
+
+/* Bottom feature strip */
+.ng-hero-features {
+  position: relative;
+  z-index: 3;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin-top: auto;
+  padding-top: 17px;
+  border-top: 1px solid rgba(233,173,47,.27);
+}
+
+.ng-feature {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  padding: 4px 13px;
+  border-right: 1px solid rgba(233,173,47,.45);
+  color: #f8f4ec;
+  font-size: clamp(10px, .78vw, 13px);
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.ng-feature:first-child {
+  justify-content: flex-start;
+  padding-left: 0;
+}
+
+.ng-feature:last-child {
+  justify-content: flex-end;
+  padding-right: 0;
+  border-right: 0;
+}
+
+.ng-feature svg {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  fill: none;
+  stroke: var(--ng-gold);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ng-feature:nth-child(3) svg {
+  stroke: var(--ng-red);
+}
+
+/* RIGHT / LOGIN PANEL */
+.ng-login-panel {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 38px 24px;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(133,0,38,.26), transparent 48%),
+    linear-gradient(145deg, #100d12 0%, #09090d 58%, #16070d 100%);
+}
+
+.ng-login-card {
+  width: min(100%, 520px);
+  max-width: 520px;
+  max-height: calc(100svh - 76px);
+  overflow-y: auto;
+  position: relative;
+  padding: 25px 49px 24px;
+  border: 1px solid rgba(255, 64, 94, .82);
+  border-radius: 27px;
+  background: linear-gradient(145deg, rgba(30,23,31,.985), rgba(13,13,18,.995) 55%, rgba(17,10,16,.99));
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.045) inset,
+    0 25px 80px rgba(0,0,0,.58),
+    0 0 38px rgba(215,0,48,.11);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(233,173,47,.35) transparent;
+}
+
+.ng-card-brand {
+  text-align: center;
+  padding-bottom: 19px;
+}
+
+.ng-card-logo {
+  display: block;
+  width: 148px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  margin: 0 auto 3px;
+  border-radius: 50%;
+  filter: drop-shadow(0 5px 12px rgba(0,0,0,.55));
+}
+
+.ng-card-academy-name {
+  font-family: Montserrat, Inter, sans-serif;
+  font-size: 33px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -.045em;
+}
+
+.ng-card-academy-subtitle {
+  margin-top: 5px;
+  font-family: Montserrat, Inter, sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -.025em;
+}
+
+.ng-card-affiliation {
+  margin: 14px auto 0;
+  padding-top: 11px;
+  max-width: 390px;
+  border-top: 1px solid rgba(233,173,47,.42);
+  color: #eee0d4;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: .045em;
+}
+
+.ng-admin-label {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  justify-content: center;
+  margin: 0 0 10px;
+  color: var(--ng-red);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .24em;
+}
+
+.ng-admin-label span {
+  height: 1px;
+  flex: 1;
+  max-width: 55px;
+  background: linear-gradient(90deg, transparent, var(--ng-red));
+}
+
+.ng-admin-label span:last-child {
+  transform: rotate(180deg);
+}
+
+.ng-login-card h2 {
+  margin: 0;
+  text-align: center;
+  font-family: Montserrat, Inter, sans-serif;
+  font-size: 39px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -.045em;
+}
+
+.ng-login-intro {
+  margin: 9px 0 21px;
+  color: var(--ng-muted);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.ng-login-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.ng-field-label {
+  margin: 0 0 7px;
+  color: #f4f1f4;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ng-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 51px;
+  margin-bottom: 15px;
+  border: 1px solid #69636d;
+  border-radius: 11px;
+  background: linear-gradient(110deg, #25232a, #1d1b22);
+  box-shadow: 0 2px 5px rgba(0,0,0,.18) inset;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.ng-input-wrap:focus-within {
+  border-color: var(--ng-red);
+  box-shadow: 0 0 0 3px rgba(242,11,59,.13);
+}
+
+.ng-input-icon {
+  width: 49px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 49px;
+}
+
+.ng-input-icon svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ng-user-icon svg {
+  stroke: var(--ng-red);
+}
+
+.ng-lock-icon svg {
+  stroke: var(--ng-gold);
+}
+
+.ng-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 12px 0 0;
+  border: 0;
+  outline: 0;
+  color: #fff;
+  background: transparent;
+  font: 500 14px Inter, Arial, sans-serif;
+}
+
+.ng-input-wrap input::placeholder {
+  color: #a9a5ad;
+  opacity: 1;
+}
+
+.ng-password-toggle {
+  width: 47px;
+  height: 100%;
+  flex: 0 0 47px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  color: #c7c2cb;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ng-password-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ng-password-toggle:hover {
+  color: #fff;
+}
+
+.ng-form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 20px;
+  font-size: 12px;
+}
+
+.ng-remember-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  position: relative;
+  color: #eeeaf0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ng-remember-label input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.ng-custom-checkbox {
+  width: 19px;
+  height: 19px;
+  border: 1px solid #8e8790;
+  border-radius: 4px;
+  background: #211f25;
+  display: inline-grid;
+  place-items: center;
+}
+
+.ng-remember-label input:checked + .ng-custom-checkbox {
+  border-color: var(--ng-red);
+  background: var(--ng-red);
+}
+
+.ng-remember-label input:checked + .ng-custom-checkbox::after {
+  content: "✓";
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.ng-remember-label input:focus-visible + .ng-custom-checkbox {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+.ng-forgot-link {
+  color: #ff3159;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.ng-forgot-link:hover {
+  color: #ff7892;
+  text-decoration: underline;
+}
+
+.ng-login-error {
+  margin: -6px 0 13px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,73,100,.45);
+  border-radius: 8px;
+  color: #ffc3cc;
+  background: rgba(160,0,35,.16);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ng-signin-button {
+  min-height: 57px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 17px;
+  border: 1px solid rgba(255,91,120,.35);
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(100deg, #f20a3a, #cf002e);
+  box-shadow: 0 10px 24px rgba(222,0,48,.22), 0 1px 0 rgba(255,255,255,.18) inset;
+  font: 800 17px Montserrat, Inter, sans-serif;
+  cursor: pointer;
+  transition: transform .16s ease, filter .16s ease, box-shadow .16s ease;
+}
+
+.ng-signin-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.09);
+  box-shadow: 0 13px 28px rgba(222,0,48,.3);
+}
+
+.ng-signin-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+
+.ng-signin-button:disabled {
+  opacity: .68;
+  cursor: wait;
+}
+
+.ng-signin-arrow {
+  font-size: 25px;
+  line-height: .8;
+  font-weight: 500;
+}
+
+.ng-secure-access {
+  margin-top: 23px;
+  text-align: center;
+}
+
+.ng-secure-divider {
+  display: block;
+  height: 1px;
+  margin-bottom: 15px;
+  background: linear-gradient(90deg, transparent, rgba(233,173,47,.35), transparent);
+}
+
+.ng-secure-access > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #e8e5e9;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .19em;
+}
+
+.ng-secure-access svg {
+  width: 21px;
+  height: 21px;
+  stroke: var(--ng-gold);
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ng-login-footer {
+  margin-top: 17px;
+  color: #c9a36a;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  line-height: 1.9;
+}
+
+.ng-login-footer span {
+  color: #827d87;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .02em;
+}
+
+/* TABLET */
+@media (min-width: 901px) and (max-width: 1250px) {
+  .ng-login-page {
+    grid-template-columns: minmax(0, 1.35fr) minmax(430px, 1fr);
+  }
+
+  .ng-hero-panel {
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+
+  .ng-hero-logo {
+    width: clamp(150px, 15vw, 190px);
+  }
+
+  .ng-brand-name {
+    font-size: clamp(38px, 4vw, 52px);
+  }
+
+  .ng-brand-subtitle {
+    font-size: clamp(15px, 1.8vw, 23px);
+  }
+
+  .ng-affiliation-line {
+    white-space: normal;
+    font-size: 10px;
+  }
+
+  .ng-hero-content {
+    grid-template-columns: 39% 61%;
+  }
+
+  .ng-hero-art-wrap {
+    left: -7%;
+    width: 48%;
+  }
+
+  .ng-hero-message h1 {
+    font-size: clamp(43px, 5vw, 62px);
+  }
+
+  .ng-values-list {
+    margin-left: 12px;
+  }
+
+  .ng-value-item {
+    min-height: 46px;
+    gap: 14px;
+    font-size: 13px;
+  }
+
+  .ng-value-number {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+    font-size: 12px;
+  }
+
+  .ng-login-panel {
+    padding: 26px 16px;
+  }
+
+  .ng-login-card {
+    padding-left: 30px;
+    padding-right: 30px;
+  }
+
+  .ng-card-logo {
+    width: 125px;
+  }
+}
+
+/* MOBILE / SMALL TABLET */
+@media (max-width: 900px) {
+  .ng-login-page {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .ng-hero-panel {
+    min-height: 680px;
+    padding: 18px clamp(18px, 5vw, 42px) 24px;
+  }
+
+  .ng-hero-brand {
+    min-height: 112px;
+    gap: 12px;
+  }
+
+  .ng-hero-logo {
+    width: 105px;
+  }
+
+  .ng-brand-divider {
+    height: 85px;
+  }
+
+  .ng-brand-name {
+    font-size: clamp(29px, 6vw, 48px);
+  }
+
+  .ng-brand-subtitle {
+    font-size: clamp(13px, 2.8vw, 22px);
+    white-space: normal;
+  }
+
+  .ng-affiliation-line {
+    white-space: normal;
+    font-size: 9px;
+    margin-top: 7px;
+  }
+
+  .ng-hero-content {
+    min-height: 455px;
+    grid-template-columns: 42% 58%;
+    margin-top: 5px;
+  }
+
+  .ng-hero-art-wrap {
+    left: -5%;
+    width: 52%;
+    height: 100%;
+  }
+
+  .ng-hero-message {
+    margin-left: 0;
+    transform: none;
+  }
+
+  .ng-hero-message h1 {
+    font-size: clamp(45px, 7.4vw, 68px);
+  }
+
+  .ng-values-list {
+    margin: 17px 0 0 10px;
+  }
+
+  .ng-value-item {
+    min-height: 40px;
+    gap: 10px;
+    font-size: 10px;
+  }
+
+  .ng-value-number {
+    width: 29px;
+    height: 29px;
+    flex-basis: 29px;
+    font-size: 10px;
+  }
+
+  .ng-login-panel {
+    min-height: auto;
+    padding: 35px 18px 48px;
+  }
+
+  .ng-login-card {
+    width: min(100%, 520px);
+    max-height: none;
+    padding: 27px clamp(22px, 6vw, 45px);
+  }
+
+  .ng-card-logo {
+    width: 125px;
+  }
+}
+
+@media (max-width: 560px) {
+  .ng-hero-panel {
+    min-height: 625px;
+    padding: 15px 15px 20px;
+  }
+
+  .ng-hero-brand {
+    min-height: 90px;
+    gap: 9px;
+  }
+
+  .ng-hero-logo {
+    width: 75px;
+  }
+
+  .ng-brand-divider {
+    height: 70px;
+    flex-basis: 2px;
+    width: 2px;
+  }
+
+  .ng-brand-name {
+    font-size: clamp(23px, 7vw, 34px);
+  }
+
+  .ng-brand-subtitle {
+    margin-top: 4px;
+    font-size: clamp(11px, 3.4vw, 16px);
+  }
+
+  .ng-affiliation-line {
+    max-width: 245px;
+    font-size: 7px;
+    letter-spacing: .025em;
+  }
+
+  .ng-hero-content {
+    min-height: 420px;
+    display: block;
+    margin: 0 -15px 10px;
+  }
+
+  .ng-hero-art-wrap {
+    left: -5%;
+    bottom: 0;
+    top: 0;
+    width: 65%;
+    height: 100%;
+  }
+
+  .ng-hero-message {
+    position: absolute;
+    top: 8%;
+    right: 4%;
+    width: 58%;
+    padding: 0;
+  }
+
+  .ng-hero-message h1 {
+    font-size: clamp(35px, 9.5vw, 50px);
+  }
+
+  .ng-values-list {
+    margin-top: 13px;
+    margin-left: 0;
+  }
+
+  .ng-value-item {
+    min-height: 35px;
+    gap: 8px;
+    font-size: 8px;
+  }
+
+  .ng-value-number {
+    width: 25px;
+    height: 25px;
+    flex-basis: 25px;
+    font-size: 8px;
+  }
+
+  .ng-hero-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 12px;
+  }
+
+  .ng-feature {
+    justify-content: flex-start !important;
+    padding: 0 7px !important;
+    border-right: 0;
+    font-size: 8px;
+    gap: 7px;
+  }
+
+  .ng-feature:nth-child(odd) {
+    border-right: 1px solid rgba(233,173,47,.35);
+  }
+
+  .ng-feature svg {
+    width: 23px;
+    height: 23px;
+    flex-basis: 23px;
+  }
+
+  .ng-login-panel {
+    padding: 24px 12px 32px;
+  }
+
+  .ng-login-card {
+    border-radius: 21px;
+    padding: 23px 20px 21px;
+  }
+
+  .ng-card-logo {
+    width: 100px;
+  }
+
+  .ng-card-academy-name {
+    font-size: 25px;
+  }
+
+  .ng-card-academy-subtitle {
+    font-size: 14px;
+  }
+
+  .ng-card-affiliation {
+    font-size: 8px;
+  }
+
+  .ng-login-card h2 {
+    font-size: 30px;
+  }
+
+  .ng-login-intro {
+    font-size: 12px;
+  }
+
+  .ng-desktop-break {
+    display: none;
+  }
+
+  .ng-input-wrap {
+    height: 50px;
+  }
+
+  .ng-form-options {
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ng-login-page *,
+  .ng-login-page *::before,
+  .ng-login-page *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}
+
+/* BEGIN_NEXTGEN_EXACT_APPROVED_BACKGROUND */
+/*
+  Use the exact background image supplied and approved by the academy.
+  It spans the entire login page; the old separate portrait image is hidden.
+*/
+.ng-login-page {
+  background-color: #08080b !important;
+  background-image: url("../assets/nextgen-approved-login-background.png") !important;
+  background-repeat: no-repeat !important;
+  background-position: center center !important;
+  /* Fill the login canvas without cropping the supplied background artwork. */
+  background-size: 100% 100% !important;
+}
+
+.ng-hero-panel {
+  background: transparent !important;
+  isolation: isolate;
+}
+
+.ng-hero-panel::before,
+.ng-hero-panel::after,
+.ng-hero-glow {
+  display: none !important;
+}
+
+.ng-hero-art-wrap {
+  display: none !important;
+}
+
+/* Keep the login side readable while allowing the original red diagonal
+   lighting in the supplied background to remain subtly visible. */
+.ng-login-panel {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(12, 9, 15, .79) 0%,
+      rgba(8, 8, 13, .86) 58%,
+      rgba(19, 5, 12, .80) 100%
+    ) !important;
+}
+
+@media (max-width: 900px) {
+  .ng-login-page {
+    background-size: auto 100% !important;
+    background-position: 28% center !important;
+  }
+
+  .ng-hero-panel {
+    background: linear-gradient(
+      90deg,
+      rgba(7, 7, 10, .08),
+      rgba(7, 7, 10, .22)
+    ) !important;
+  }
+
+  .ng-login-panel {
+    background: rgba(8, 8, 13, .88) !important;
+  }
+}
+/* END_NEXTGEN_EXACT_APPROVED_BACKGROUND */
+
+/* BEGIN_NEXTGEN_REFERENCE_PROPORTIONS_V4 */
+/*
+  Approved reference canvas: 1672 x 941 (16:9).
+  On wider-than-16:9 displays, center a correctly proportioned stage instead
+  of stretching the supplied background or spreading the login composition.
+*/
+body:has(.ng-login-page),
+#root:has(.ng-login-page) {
+  min-height: 100vh;
+  min-height: 100svh;
+  background: #07070a !important;
+}
+
+#root:has(.ng-login-page) {
+  display: grid;
+  place-items: center;
+}
+
+.ng-login-page {
+  width: min(100vw, calc(100svh * 1.7768331562)) !important;
+  height: min(100svh, calc(100vw * 0.5627990436)) !important;
+  min-height: 0 !important;
+  aspect-ratio: 1672 / 941;
+  margin: 0 auto;
+  grid-template-columns: 65.67% 34.33% !important;
+  overflow: hidden !important;
+  background-size: 100% 100% !important;
+  background-position: center center !important;
+}
+
+.ng-hero-panel,
+.ng-login-panel {
+  min-height: 0 !important;
+  height: 100%;
+}
+
+/* Approved header: crest, gold divider and bold NEXTGEN wordmark. */
+.ng-hero-panel {
+  padding-top: 8px !important;
+  padding-bottom: 25px !important;
+}
+
+.ng-hero-brand {
+  min-height: 190px !important;
+  gap: 19px !important;
+}
+
+.ng-hero-logo {
+  width: 248px !important;
+  max-width: 26%;
+}
+
+/* Keep the hero message in its own open black area to the right of the
+   practitioner. The reference artwork is already part of the background. */
+.ng-hero-content {
+  grid-template-columns: 42.5% 57.5% !important;
+  margin-top: 0 !important;
+  margin-bottom: 10px !important;
+}
+
+.ng-hero-art-wrap {
+  display: none !important;
+}
+
+.ng-hero-message {
+  margin-left: -2px !important;
+  padding-top: 8px !important;
+  padding-bottom: 14px !important;
+  transform: translateY(-3px) !important;
+}
+
+.ng-hero-message h1 {
+  font-size: clamp(64px, 4.55vw, 76px) !important;
+  line-height: .99 !important;
+  letter-spacing: -.052em !important;
+}
+
+.ng-values-list {
+  margin-top: 21px !important;
+  margin-left: 35px !important;
+  max-width: 440px !important;
+}
+
+.ng-value-item {
+  min-height: 55px !important;
+  gap: 22px !important;
+  font-size: 16px !important;
+}
+
+.ng-value-number {
+  width: 42px !important;
+  height: 42px !important;
+  flex-basis: 42px !important;
+  font-size: 14px !important;
+}
+
+.ng-hero-features {
+  padding-top: 17px !important;
+}
+
+/* Right panel remains transparent enough to show the red diagonal background.
+   The card itself stays opaque and readable. */
+.ng-login-panel {
+  padding: 36px 16px !important;
+  background: linear-gradient(
+    145deg,
+    rgba(12, 9, 15, .34) 0%,
+    rgba(8, 8, 13, .48) 58%,
+    rgba(19, 5, 12, .38) 100%
+  ) !important;
+}
+
+.ng-login-card {
+  width: 520px !important;
+  max-width: calc(100% + 68px) !important;
+  max-height: calc(100% - 12px) !important;
+  padding: 24px 49px 25px !important;
+  transform: translate(-62px, -3px) !important;
+  border-color: rgba(255, 64, 94, .9) !important;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.045) inset,
+    0 25px 80px rgba(0,0,0,.58),
+    0 0 42px rgba(215,0,48,.16),
+    0 -5px 22px rgba(255,35,76,.09) !important;
+}
+
+.ng-card-brand {
+  padding-bottom: 19px !important;
+}
+
+.ng-card-logo {
+  width: 164px !important;
+  margin-bottom: 3px !important;
+}
+
+.ng-card-academy-name {
+  font-size: 35px !important;
+  letter-spacing: -.045em !important;
+}
+
+.ng-card-academy-subtitle {
+  margin-top: 5px !important;
+  font-size: 18px !important;
+}
+
+.ng-card-affiliation {
+  margin-top: 13px !important;
+  padding-top: 11px !important;
+  font-size: 10px !important;
+  letter-spacing: .045em !important;
+}
+
+.ng-login-card h2 {
+  font-size: 39px !important;
+}
+
+.ng-field-label {
+  font-size: 13px !important;
+}
+
+.ng-input-wrap {
+  height: 51px !important;
+  margin-bottom: 16px !important;
+}
+
+.ng-signin-button {
+  min-height: 62px !important;
+}
+
+.ng-secure-access {
+  margin-top: 23px !important;
+}
+
+/* At narrower-than-16:9 desktop ratios, use a fluid full-height layout rather
+   than compressing the card. Existing tablet/mobile rules remain in force. */
+@media (min-width: 901px) and (max-aspect-ratio: 16 / 9) {
+  #root:has(.ng-login-page) {
+    display: block;
+  }
+
+  .ng-login-page {
+    width: 100vw !important;
+    height: auto !important;
+    min-height: 100svh !important;
+    aspect-ratio: auto;
+    grid-template-columns: minmax(0, 1.35fr) minmax(430px, 1fr) !important;
+    background-size: cover !important;
+  }
+
+  .ng-hero-panel,
+  .ng-login-panel {
+    min-height: 100svh !important;
+    height: auto;
+  }
+
+  .ng-hero-logo {
+    width: clamp(150px, 15vw, 205px) !important;
+  }
+
+  .ng-login-card {
+    width: min(100%, 520px) !important;
+    max-width: 100% !important;
+    max-height: calc(100svh - 60px) !important;
+    transform: translateX(-25px) !important;
+  }
+}
+
+/* Small desktop/tablet and mobile: retain the existing stacked layout. */
+@media (max-width: 900px) {
+  #root:has(.ng-login-page) {
+    display: block;
+  }
+
+  .ng-login-page {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100svh !important;
+    aspect-ratio: auto;
+    background-size: auto 100% !important;
+  }
+
+  .ng-login-card {
+    width: min(100%, 520px) !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    transform: none !important;
+  }
+}
+/* END_NEXTGEN_REFERENCE_PROPORTIONS_V4 */
+
+/* BEGIN_NEXTGEN_ARTWORK_SPACING_V5 */
+/*
+  Keep the full-page approved background as-is for the diagonal lighting and
+  login-card side. Repaint only the left hero panel with the same exact image,
+  shifted left slightly, so the practitioner no longer crowds the text.
+*/
+@media (min-width: 901px) {
+  .ng-hero-panel {
+    background: transparent !important;
+    isolation: isolate;
+  }
+
+  .ng-hero-panel::before {
+    content: "" !important;
+    display: block !important;
+    position: absolute !important;
+    z-index: -2 !important;
+    inset: 0 !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+    background-image: url("../assets/nextgen-approved-login-background.png") !important;
+    background-repeat: no-repeat !important;
+    background-size: auto 100% !important;
+    /* Shift the practitioner/ring left while retaining the dark text area. */
+    background-position: 12% center !important;
+  }
+
+  .ng-hero-panel::after {
+    display: none !important;
+  }
+
+  /* Open a clean gap between the extended fist and the slogan/value list. */
+  .ng-hero-message {
+    margin-left: 0 !important;
+    transform: translate(32px, -3px) !important;
+  }
+
+  .ng-values-list {
+    margin-left: 35px !important;
+  }
+}
+
+/* Preserve the already-approved stacked layout on tablets and phones. */
+@media (max-width: 900px) {
+  .ng-hero-panel::before {
+    display: none !important;
+  }
+
+  .ng-hero-message {
+    margin-left: 0 !important;
+    transform: none !important;
+  }
+}
+/* END_NEXTGEN_ARTWORK_SPACING_V5 */
+
+/* BEGIN_NEXTGEN_FULL_VIEWPORT_V7 */
+/*
+  V4 constrained the desktop login page to a centered 16:9 canvas.
+  That created the black gutters visible at the left and right of the
+  user's full-screen browser screenshot. Restore true edge-to-edge layout.
+*/
+@media (min-width: 901px) {
+  html,
+  body,
+  #root {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body:has(.ng-login-page) {
+    overflow: hidden !important;
+    background: #08080b !important;
+  }
+
+  #root:has(.ng-login-page) {
+    display: block !important;
+    place-items: initial !important;
+  }
+
+  .ng-login-page {
+    width: 100vw !important;
+    max-width: none !important;
+    height: 100vh !important;
+    height: 100svh !important;
+    min-height: 100vh !important;
+    min-height: 100svh !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    grid-template-columns: 65.67% 34.33% !important;
+    background-position: center center !important;
+    /*
+      Keep the whole exact approved artwork visible, including cherry
+      blossoms and reflective floor, rather than cropping it with cover.
+      This stretches the source to the actual viewport dimensions.
+    */
+    background-size: 100% 100% !important;
+  }
+
+  .ng-hero-panel,
+  .ng-login-panel {
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  /* The login card keeps its existing proportions and reference offset. */
+  .ng-login-card {
+    max-height: calc(100svh - 24px) !important;
+  }
+}
+
+/* Existing tablet/mobile stacked layout remains in control below 901px. */
+@media (max-width: 900px) {
+  html,
+  body,
+  #root {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  #root:has(.ng-login-page) {
+    display: block !important;
+  }
+
+  .ng-login-page {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100svh !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+    margin: 0 !important;
+  }
+
+  body:has(.ng-login-page) {
+    overflow: auto !important;
+  }
+}
+/* END_NEXTGEN_FULL_VIEWPORT_V7 */
+
+/* BEGIN_NEXTGEN_WORDMARK_SAFE_V9 */
+/*
+  Typography-only match to the approved NextGen wordmark:
+  futuristic, forward-leaning capitals; white NEXT and red GEN.
+*/
+.ng-brand-name,
+.ng-card-academy-name {
+  font-family: "Orbitron", "Montserrat", sans-serif !important;
+  font-style: italic !important;
+  font-weight: 900 !important;
+  letter-spacing: -.065em !important;
+  line-height: .98 !important;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+.ng-brand-name {
+  transform: skewX(-6deg);
+  transform-origin: left center;
+  text-shadow: 0 2px 1px rgba(0,0,0,.48);
+}
+
+.ng-card-academy-name {
+  display: inline-block;
+  transform: skewX(-6deg);
+  transform-origin: center center;
+  text-shadow: 0 2px 1px rgba(0,0,0,.48);
+}
+
+.ng-brand-name span,
+.ng-card-academy-name span {
+  color: #f20b3b !important;
+  text-shadow: 0 2px 1px rgba(0,0,0,.4);
+}
+
+/* Condensed bold academy descriptor, with a subtle forward slant. */
+.ng-brand-subtitle,
+.ng-card-academy-subtitle {
+  font-family: "Rajdhani", "Montserrat", sans-serif !important;
+  font-style: italic !important;
+  font-weight: 700 !important;
+  letter-spacing: .015em !important;
+  line-height: 1.04 !important;
+  transform: skewX(-3deg);
+}
+
+.ng-card-academy-subtitle {
+  transform-origin: center center;
+}
+
+@media (max-width: 900px) {
+  .ng-brand-name,
+  .ng-card-academy-name {
+    transform: skewX(-4deg);
+  }
+}
+/* END_NEXTGEN_WORDMARK_SAFE_V9 */
+
+/* BEGIN_NEXTGEN_WORDMARK_REFERENCE_V10 */
+/*
+  Match the supplied brand crop:
+  - NEXTGEN: heavy italic geometric sans, not sci-fi/Orbitron
+  - COMBAT & FITNESS ACADEMY: broad, heavy, upright sans
+  - Gold horizontal separator above association membership line
+*/
+.ng-brand-name,
+.ng-card-academy-name {
+  font-family: "Montserrat", "Arial Black", sans-serif !important;
+  font-style: italic !important;
+  font-weight: 900 !important;
+  letter-spacing: -.065em !important;
+  line-height: .96 !important;
+  text-transform: uppercase;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  filter: none !important;
+  text-shadow: 0 1px 1px rgba(0,0,0,.36) !important;
+}
+
+.ng-brand-name {
+  display: inline-block;
+  transform: skewX(-5deg) !important;
+  transform-origin: left center !important;
+}
+
+.ng-card-academy-name {
+  display: inline-block;
+  transform: skewX(-5deg) !important;
+  transform-origin: center center !important;
+}
+
+.ng-brand-name span,
+.ng-card-academy-name span {
+  color: #f20b3b !important;
+  -webkit-text-fill-color: #f20b3b !important;
+  background: none !important;
+  filter: none !important;
+}
+
+/* Approved subtitle: bold, broad, upright; avoid the narrow Rajdhani italic look. */
+.ng-brand-subtitle,
+.ng-card-academy-subtitle {
+  font-family: "Montserrat", Arial, sans-serif !important;
+  font-style: normal !important;
+  font-weight: 900 !important;
+  letter-spacing: -.025em !important;
+  line-height: 1.05 !important;
+  transform: none !important;
+  text-shadow: 0 1px 1px rgba(0,0,0,.35) !important;
+}
+
+.ng-brand-subtitle {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding-bottom: 9px;
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(
+    90deg,
+    #b77a12 0%,
+    #f7c84b 34%,
+    #ffe18a 52%,
+    #d18c19 78%,
+    rgba(209,140,25,.15) 100%
+  ) 1;
+  box-shadow: 0 5px 9px -7px rgba(255,192,54,.95);
+}
+
+.ng-affiliation-line {
+  margin-top: 7px !important;
+  font-family: "Montserrat", Arial, sans-serif !important;
+  font-style: normal !important;
+  font-weight: 800 !important;
+  letter-spacing: .035em !important;
+  line-height: 1.3 !important;
+}
+
+.ng-card-affiliation {
+  font-family: "Montserrat", Arial, sans-serif !important;
+  font-style: normal !important;
+  font-weight: 800 !important;
+  letter-spacing: .025em !important;
+}
+
+/* Keep the same family treatment on compact screens without overflow. */
+@media (max-width: 900px) {
+  .ng-brand-name {
+    letter-spacing: -.06em !important;
+  }
+
+  .ng-brand-subtitle {
+    padding-bottom: 6px;
+  }
+}
+/* END_NEXTGEN_WORDMARK_REFERENCE_V10 */
+
+/* BEGIN_NEXTGEN_EXACT_WORDMARK */
+.ng-brand-divider,
+.ng-brand-copy {
+  display: none !important;
+}
+
+.ng-hero-wordmark {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  max-width: 690px;
+  height: auto;
+  max-height: 164px;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,.4));
+}
+
+@media (min-width: 901px) and (max-width: 1250px) {
+  .ng-hero-wordmark { max-width: 610px; max-height: 142px; }
+}
+
+@media (max-width: 900px) {
+  .ng-hero-wordmark {
+    flex: 1 1 0;
+    width: calc(100% - 118px);
+    max-width: 620px;
+    max-height: 112px;
+    object-position: left center;
+  }
+}
+
+@media (max-width: 560px) {
+  .ng-hero-wordmark { width: calc(100% - 84px); max-height: 86px; }
+}
+/* END_NEXTGEN_EXACT_WORDMARK */
